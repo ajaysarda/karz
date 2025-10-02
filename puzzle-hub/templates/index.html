@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.title}}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="/static/style.css" rel="stylesheet">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="#">
+                <i class="fas fa-puzzle-piece me-2"></i>
+                Puzzle Hub
+            </a>
+            <div class="navbar-nav ms-auto">
+                <span class="navbar-text" id="currentPlayer">Welcome!</span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <div class="hero-section">
+        <div class="container">
+            <div class="row">
+                <div class="col-lg-8 mx-auto text-center">
+                    <h1 class="display-4 mb-4">
+                        <i class="fas fa-gamepad"></i> Choose Your Puzzle Adventure
+                    </h1>
+                    <p class="lead">Select from our collection of educational puzzles and games</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container my-5">
+        <!-- Main Content Tabs -->
+        <ul class="nav nav-tabs mb-4" id="mainTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="home-tab" data-bs-toggle="tab" data-bs-target="#home" type="button" role="tab">
+                    <i class="fas fa-home"></i> Home
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="spelling-tab" data-bs-toggle="tab" data-bs-target="#spelling" type="button" role="tab">
+                    <i class="fas fa-spell-check"></i> Spelling Bee
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="yohaku-tab" data-bs-toggle="tab" data-bs-target="#yohaku" type="button" role="tab">
+                    <i class="fas fa-calculator"></i> Yohaku Math
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="profile-tab" data-bs-toggle="tab" data-bs-target="#profile" type="button" role="tab">
+                    <i class="fas fa-user"></i> Profile
+                </button>
+            </li>
+        </ul>
+
+        <!-- Tab Content -->
+        <div class="tab-content" id="mainTabsContent">
+            <!-- Home Tab -->
+            <div class="tab-pane fade show active" id="home" role="tabpanel">
+                <div class="row">
+                    <!-- Spelling Bee Card -->
+                    <div class="col-md-6 mb-4">
+                        <div class="card puzzle-card h-100" onclick="selectPuzzle('spelling')">
+                            <div class="card-header bg-warning text-white">
+                                <h4 class="mb-0">
+                                    <i class="fas fa-spell-check me-2"></i>
+                                    Spelling Bee
+                                </h4>
+                            </div>
+                            <div class="card-body">
+                                <div class="puzzle-preview spelling-preview mb-3">
+                                    <div class="word-display">ELEPHANT</div>
+                                    <div class="definition-text">A large mammal with a trunk</div>
+                                </div>
+                                <p class="card-text">Test your spelling skills with age-appropriate words. Features:</p>
+                                <ul class="feature-list">
+                                    <li><i class="fas fa-volume-up text-info"></i> Audio pronunciation</li>
+                                    <li><i class="fas fa-lightbulb text-warning"></i> Helpful hints</li>
+                                    <li><i class="fas fa-chart-line text-success"></i> Adaptive difficulty</li>
+                                    <li><i class="fas fa-clock text-primary"></i> Timed challenges</li>
+                                </ul>
+                                <div class="age-badges mt-3">
+                                    <span class="badge bg-light text-dark">Ages 6-8</span>
+                                    <span class="badge bg-light text-dark">Ages 9-11</span>
+                                    <span class="badge bg-light text-dark">Ages 12-14</span>
+                                    <span class="badge bg-light text-dark">Ages 15+</span>
+                                </div>
+                            </div>
+                            <div class="card-footer">
+                                <button class="btn btn-warning btn-lg w-100">
+                                    <i class="fas fa-play me-2"></i>
+                                    Start Spelling Bee
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Yohaku Card -->
+                    <div class="col-md-6 mb-4">
+                        <div class="card puzzle-card h-100" onclick="selectPuzzle('yohaku')">
+                            <div class="card-header bg-info text-white">
+                                <h4 class="mb-0">
+                                    <i class="fas fa-calculator me-2"></i>
+                                    Yohaku Math
+                                </h4>
+                            </div>
+                            <div class="card-body">
+                                <div class="puzzle-preview yohaku-preview mb-3">
+                                    <div class="mini-grid">
+                                        <div class="mini-row">
+                                            <div class="mini-cell">?</div>
+                                            <div class="mini-cell">3</div>
+                                            <div class="mini-cell sum">8</div>
+                                        </div>
+                                        <div class="mini-row">
+                                            <div class="mini-cell">2</div>
+                                            <div class="mini-cell">?</div>
+                                            <div class="mini-cell sum">7</div>
+                                        </div>
+                                        <div class="mini-row">
+                                            <div class="mini-cell sum">7</div>
+                                            <div class="mini-cell sum">8</div>
+                                            <div class="mini-cell sum">15</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <p class="card-text">Solve mathematical grid puzzles. Features:</p>
+                                <ul class="feature-list">
+                                    <li><i class="fas fa-plus text-success"></i> Addition, subtraction, multiplication</li>
+                                    <li><i class="fas fa-th text-info"></i> 2x2, 3x3, 4x4 grids</li>
+                                    <li><i class="fas fa-cogs text-warning"></i> Adjustable difficulty</li>
+                                    <li><i class="fas fa-stopwatch text-danger"></i> Timer challenges</li>
+                                </ul>
+                                <div class="difficulty-badges mt-3">
+                                    <span class="badge bg-success">Easy</span>
+                                    <span class="badge bg-warning">Medium</span>
+                                    <span class="badge bg-danger">Hard</span>
+                                </div>
+                            </div>
+                            <div class="card-footer">
+                                <button class="btn btn-info btn-lg w-100">
+                                    <i class="fas fa-play me-2"></i>
+                                    Start Yohaku Math
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Stats -->
+                <div class="row mt-4">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">
+                                    <i class="fas fa-chart-bar me-2"></i>
+                                    Your Progress
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row text-center">
+                                    <div class="col-md-3">
+                                        <div class="stat-item">
+                                            <div class="stat-number" id="totalGamesPlayed">0</div>
+                                            <div class="stat-label">Games Played</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="stat-item">
+                                            <div class="stat-number" id="spellingWordsLearned">0</div>
+                                            <div class="stat-label">Words Learned</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="stat-item">
+                                            <div class="stat-number" id="yohakuPuzzlesSolved">0</div>
+                                            <div class="stat-label">Puzzles Solved</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="stat-item">
+                                            <div class="stat-number" id="currentStreak">0</div>
+                                            <div class="stat-label">Current Streak</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Spelling Bee Tab -->
+            <div class="tab-pane fade" id="spelling" role="tabpanel">
+                <div class="row">
+                    <div class="col-lg-8 mx-auto">
+                        <div class="card shadow">
+                            <div class="card-header bg-warning text-white">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <h3 class="mb-0">
+                                        <i class="fas fa-spell-check"></i> Spelling Bee Game
+                                    </h3>
+                                    <div class="text-end">
+                                        <div class="badge bg-light text-dark fs-6">Score: <span id="spellingScore">0</span></div>
+                                        <div class="badge bg-light text-dark fs-6 ms-2">Level: <span id="spellingLevel">1</span></div>
+                                        <div class="badge bg-light text-dark fs-6 ms-2">Streak: <span id="spellingStreak">0</span></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card-body text-center">
+                                <!-- Game Start Screen -->
+                                <div id="spellingGameStart">
+                                    <h4 class="mb-4">Ready to start the spelling bee game?</h4>
+                                    <div class="row mb-4">
+                                        <div class="col-md-6">
+                                            <label for="spellingAge" class="form-label">Age</label>
+                                            <input type="number" class="form-control" id="spellingAge" min="6" max="18" value="10">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label for="spellingTheme" class="form-label">Theme</label>
+                                            <select class="form-select" id="spellingTheme">
+                                                <option value="">General</option>
+                                                <option value="animals">Animals</option>
+                                                <option value="science">Science</option>
+                                                <option value="nature">Nature</option>
+                                                <option value="sports">Sports</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <button class="btn btn-warning btn-lg" onclick="startSpellingGame()">
+                                        <i class="fas fa-play"></i> Start Spelling Game
+                                    </button>
+                                </div>
+
+                                <!-- Current Word Display -->
+                                <div id="spellingCurrentWord" style="display: none;">
+                                    <div class="mb-4">
+                                        <div class="d-flex justify-content-between align-items-center mb-3">
+                                            <h4 class="text-muted mb-0">Spell this word:</h4>
+                                            <div class="timer-container">
+                                                <div class="timer-circle" id="spellingTimerCircle">
+                                                    <div class="timer-text" id="spellingTimerText">30</div>
+                                                    <div class="timer-progress" id="spellingTimerProgress"></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="word-display mb-3" id="currentSpellingWord">???</div>
+                                        <div class="mb-3">
+                                            <button class="btn btn-info me-2" onclick="playSpellingPronunciation()">
+                                                <i class="fas fa-volume-up"></i> Listen
+                                            </button>
+                                            <button class="btn btn-secondary" onclick="showSpellingHint()">
+                                                <i class="fas fa-lightbulb"></i> Hint
+                                            </button>
+                                        </div>
+                                        <div id="spellingWordDefinition" class="text-muted mb-3"></div>
+                                    </div>
+                                    
+                                    <div class="mb-4">
+                                        <div class="input-group input-group-lg">
+                                            <input type="text" class="form-control form-control-lg text-center" 
+                                                   id="spellingWordInput" placeholder="Type the word here..." 
+                                                   autocomplete="off" spellcheck="false">
+                                            <button class="btn btn-success" onclick="submitSpellingWord()">
+                                                <i class="fas fa-check"></i> Submit
+                                            </button>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="progress mb-3" style="height: 10px;">
+                                        <div class="progress-bar bg-warning" id="spellingProgress" role="progressbar" style="width: 0%"></div>
+                                    </div>
+                                    
+                                    <div class="d-flex justify-content-center gap-2">
+                                        <button class="btn btn-outline-primary" onclick="skipSpellingWord()">
+                                            <i class="fas fa-forward"></i> Skip
+                                        </button>
+                                        <button class="btn btn-outline-secondary" onclick="endSpellingGame()">
+                                            <i class="fas fa-stop"></i> End Game
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Results -->
+                                <div id="spellingResults" style="display: none;">
+                                    <h4 class="mb-4">Game Complete!</h4>
+                                    <div class="row text-center">
+                                        <div class="col-md-4">
+                                            <div class="card bg-success text-white">
+                                                <div class="card-body">
+                                                    <h5 class="card-title">Score</h5>
+                                                    <h2 id="spellingFinalScore">0</h2>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="card bg-info text-white">
+                                                <div class="card-body">
+                                                    <h5 class="card-title">Correct</h5>
+                                                    <h2 id="spellingCorrectCount">0</h2>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="card bg-warning text-white">
+                                                <div class="card-body">
+                                                    <h5 class="card-title">Accuracy</h5>
+                                                    <h2 id="spellingAccuracy">0%</h2>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="mt-4">
+                                        <button class="btn btn-warning me-2" onclick="startSpellingGame()">
+                                            <i class="fas fa-redo"></i> Play Again
+                                        </button>
+                                        <button class="btn btn-outline-primary" onclick="goHome()">
+                                            <i class="fas fa-home"></i> Back to Home
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Yohaku Tab -->
+            <div class="tab-pane fade" id="yohaku" role="tabpanel">
+                <div class="row">
+                    <div class="col-lg-10 mx-auto">
+                        <!-- Settings Card -->
+                        <div id="yohakuSettingsCard" class="card mb-4">
+                            <div class="card-header bg-info text-white">
+                                <h5 class="mb-0">
+                                    <i class="fas fa-cog me-2"></i>
+                                    Yohaku Game Settings
+                                </h5>
+                                <small>Choose your preferred operation - we'll create 10 puzzles with increasing difficulty!</small>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-3">
+                                        <label for="yohakuGridSize" class="form-label">Grid Size</label>
+                                        <select class="form-select" id="yohakuGridSize">
+                                            <option value="2" selected>2x2</option>
+                                            <option value="3">3x3</option>
+                                            <option value="4">4x4</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="yohakuOperation" class="form-label">Operation</label>
+                                        <select class="form-select" id="yohakuOperation">
+                                            <option value="addition" selected>Addition (+)</option>
+                                            <option value="subtraction">Subtraction (-)</option>
+                                            <option value="multiplication">Multiplication (×)</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label for="yohakuDifficulty" class="form-label">Difficulty</label>
+                                        <select class="form-select" id="yohakuDifficulty">
+                                            <option value="easy" selected>Easy</option>
+                                            <option value="medium">Medium</option>
+                                            <option value="hard">Hard</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label for="yohakuTimer" class="form-label">Timer (sec)</label>
+                                        <input type="number" class="form-control" id="yohakuTimer" value="30" min="10" max="300">
+                                    </div>
+                                    <div class="col-md-2 d-flex align-items-end">
+                                        <button class="btn btn-info w-100" onclick="startYohakuGame()">
+                                            <i class="fas fa-play me-2"></i>
+                                            Start 10 Puzzles
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <div class="row mt-3">
+                                    <div class="col-md-3">
+                                        <label for="yohakuMinRange" class="form-label">Min Number</label>
+                                        <input type="number" class="form-control" id="yohakuMinRange" value="1" min="1" max="50">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="yohakuMaxRange" class="form-label">Max Number</label>
+                                        <input type="number" class="form-control" id="yohakuMaxRange" value="10" min="2" max="100">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Game Area -->
+                        <div id="yohakuGameArea" style="display: none;">
+                            <!-- Game Progress -->
+                            <div class="row mb-4">
+                                <div class="col-12">
+                                    <div class="card">
+                                        <div class="card-body">
+                                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                                <h5 class="mb-0">
+                                                    <span id="yohakuCurrentLevel">Puzzle 1</span> of 10
+                                                    <span class="badge bg-info ms-2" id="yohakuCurrentDifficulty">Easy</span>
+                                                </h5>
+                                                <div class="text-end">
+                                                    <div class="badge bg-success fs-6">Score: <span id="yohakuTotalScore">0</span></div>
+                                                </div>
+                                            </div>
+                                            <div class="progress" style="height: 8px;">
+                                                <div class="progress-bar bg-info" id="yohakuGameProgress" role="progressbar" style="width: 10%"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row mb-4">
+                                <div class="col-md-6">
+                                    <div class="card">
+                                        <div class="card-body text-center">
+                                            <div class="timer-container">
+                                                <div class="timer-circle" id="yohakuTimerCircle">
+                                                    <div class="timer-text" id="yohakuTimerText">30</div>
+                                                    <div class="timer-progress" id="yohakuTimerProgress"></div>
+                                                </div>
+                                            </div>
+                                            <h6 class="mt-2 mb-0">Time Remaining</h6>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="card">
+                                        <div class="card-body">
+                                            <div class="d-flex justify-content-center gap-2">
+                                                <button class="btn btn-info" onclick="getYohakuHint()">
+                                                    <i class="fas fa-lightbulb me-2"></i>
+                                                    Hint
+                                                </button>
+                                                <button class="btn btn-success" onclick="validateYohakuSolution()">
+                                                    <i class="fas fa-check me-2"></i>
+                                                    Check
+                                                </button>
+                                                <button class="btn btn-secondary" onclick="showYohakuSettings()">
+                                                    <i class="fas fa-cog me-2"></i>
+                                                    New Game
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row justify-content-center">
+                                <div class="col-auto">
+                                    <div class="card">
+                                        <div class="card-header text-center">
+                                            <h5 class="mb-0">
+                                                <span id="yohakuOperationDisplay">Addition</span> Puzzle
+                                            </h5>
+                                        </div>
+                                        <div class="card-body">
+                                            <div id="yohakuPuzzleGrid" class="puzzle-grid">
+                                                <!-- Grid will be generated by JavaScript -->
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row mt-4">
+                                <div class="col-12">
+                                    <div class="card">
+                                        <div class="card-body">
+                                            <h6><i class="fas fa-info-circle me-2"></i>How to Play:</h6>
+                                            <ul class="mb-0">
+                                                <li>Fill in the empty cells with numbers</li>
+                                                <li>Each row and column must equal the sum shown at the end</li>
+                                                <li>Use the operation shown (addition, subtraction, or multiplication)</li>
+                                                <li>Click "Check" to validate your solution</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Profile Tab -->
+            <div class="tab-pane fade" id="profile" role="tabpanel">
+                <div class="row">
+                    <div class="col-lg-8 mx-auto">
+                        <div class="card shadow">
+                            <div class="card-header bg-primary text-white">
+                                <h3 class="mb-0"><i class="fas fa-user"></i> Player Profile</h3>
+                            </div>
+                            <div class="card-body">
+                                <form id="profileForm">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <label for="playerName" class="form-label">Player Name</label>
+                                            <input type="text" class="form-control" id="playerName" placeholder="Enter your name">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label for="playerAge" class="form-label">Age</label>
+                                            <input type="number" class="form-control" id="playerAge" min="6" max="18" value="10">
+                                        </div>
+                                    </div>
+                                    <div class="mt-4 text-center">
+                                        <button type="submit" class="btn btn-primary btn-lg">
+                                            <i class="fas fa-save"></i> Save Profile
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading Indicator -->
+        <div class="text-center loading" id="loading" style="display: none;">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Loading puzzle...</p>
+        </div>
+    </div>
+
+    <!-- Results Modal -->
+    <div class="modal fade" id="resultsModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="resultsTitle">Game Results</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="resultsBody">
+                    <!-- Results content will be inserted here -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" onclick="goHome()" data-bs-dismiss="modal">Back to Home</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/app.js"></script>
+</body>
+</html>

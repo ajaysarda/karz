@@ -1,0 +1,248 @@
+/* Yohaku Game Styles */
+
+body {
+    background-color: #f8f9fa;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Timer Styles */
+.timer-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.timer-circle {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: #f8f9fa;
+    border: 4px solid #dee2e6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+}
+
+.timer-text {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #495057;
+    z-index: 2;
+}
+
+.timer-progress {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: conic-gradient(#28a745 360deg, #e9ecef 360deg);
+    transition: background 0.1s linear;
+}
+
+.timer-warning {
+    border-color: #ffc107 !important;
+}
+
+.timer-warning .timer-progress {
+    background: conic-gradient(#ffc107 360deg, #e9ecef 360deg);
+}
+
+.timer-danger {
+    border-color: #dc3545 !important;
+}
+
+.timer-danger .timer-progress {
+    background: conic-gradient(#dc3545 360deg, #e9ecef 360deg);
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+/* Puzzle Grid Styles */
+.puzzle-grid {
+    display: inline-block;
+    border: 2px solid #495057;
+    border-radius: 8px;
+    padding: 10px;
+    background: white;
+}
+
+.puzzle-row {
+    display: flex;
+    margin-bottom: 2px;
+}
+
+.puzzle-row:last-child {
+    margin-bottom: 0;
+}
+
+.puzzle-cell {
+    width: 60px;
+    height: 60px;
+    border: 1px solid #dee2e6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 2px;
+    font-size: 1.2rem;
+    font-weight: bold;
+    position: relative;
+}
+
+.puzzle-cell:last-child {
+    margin-right: 0;
+}
+
+.puzzle-cell input {
+    width: 100%;
+    height: 100%;
+    border: none;
+    text-align: center;
+    font-size: 1.2rem;
+    font-weight: bold;
+    background: transparent;
+    outline: none;
+}
+
+.puzzle-cell input:focus {
+    background-color: #e3f2fd;
+}
+
+/* Cell Types */
+.cell-given {
+    background-color: #e9ecef;
+    color: #495057;
+}
+
+.cell-sum {
+    background-color: #007bff;
+    color: white;
+    font-weight: bold;
+}
+
+.cell-sum.row-sum {
+    background-color: #28a745;
+}
+
+.cell-sum.column-sum {
+    background-color: #17a2b8;
+}
+
+.cell-sum.total-sum {
+    background-color: #6f42c1;
+}
+
+.cell-empty {
+    background-color: #fff;
+    border: 2px solid #007bff;
+}
+
+.cell-correct {
+    background-color: #d4edda;
+    border-color: #28a745;
+}
+
+.cell-incorrect {
+    background-color: #f8d7da;
+    border-color: #dc3545;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .puzzle-cell {
+        width: 50px;
+        height: 50px;
+        font-size: 1rem;
+    }
+    
+    .puzzle-cell input {
+        font-size: 1rem;
+    }
+    
+    .timer-circle {
+        width: 60px;
+        height: 60px;
+    }
+    
+    .timer-text {
+        font-size: 1.2rem;
+    }
+}
+
+@media (max-width: 576px) {
+    .puzzle-cell {
+        width: 40px;
+        height: 40px;
+        font-size: 0.9rem;
+    }
+    
+    .puzzle-cell input {
+        font-size: 0.9rem;
+    }
+}
+
+/* Animation Effects */
+.cell-flash {
+    animation: flash 0.5s ease-in-out;
+}
+
+@keyframes flash {
+    0%, 100% { background-color: inherit; }
+    50% { background-color: #fff3cd; }
+}
+
+.puzzle-solved {
+    animation: celebrate 1s ease-in-out;
+}
+
+@keyframes celebrate {
+    0%, 100% { transform: scale(1); }
+    25% { transform: scale(1.02); }
+    50% { transform: scale(1.05); }
+    75% { transform: scale(1.02); }
+}
+
+/* Loading Spinner */
+.loading-spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid rgba(255,255,255,.3);
+    border-radius: 50%;
+    border-top-color: #fff;
+    animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Hover Effects */
+.btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+/* Success/Error Messages */
+.alert-success {
+    border-left: 4px solid #28a745;
+}
+
+.alert-danger {
+    border-left: 4px solid #dc3545;
+}
+
+.alert-info {
+    border-left: 4px solid #17a2b8;
+}

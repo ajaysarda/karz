@@ -1,0 +1,145 @@
+{
+  "problems": [
+    {
+      "word": "orchestrate",
+      "definition": "To arrange or direct the elements of a situation to produce a desired effect.",
+      "sentence": "The teacher orchestrated a wonderful school play involving all the students.",
+      "difficulty": "middle",
+      "age_group": "11 years",
+      "hints": [
+        "It starts like 'orchestra' but ends with 'te'.",
+        "Remember the 'ch' sound in the middle, like in 'chess'.",
+        "Think of an orchestra conductor who leads music."
+      ],
+      "phonetic": "ˈɔːr.kɪ.streɪt"
+    },
+    {
+      "word": "journey",
+      "definition": "The act of traveling from one place to another.",
+      "sentence": "They planned a long journey across the country during summer vacation.",
+      "difficulty": "middle",
+      "age_group": "11 years",
+      "hints": [
+        "Starts with 'j' and ends with 'ney'.",
+        "The 'r' and 'n' are close together in the middle.",
+        "Think 'jour' as in 'journal' plus 'ney'."
+      ],
+      "phonetic": "ˈdʒɜːr.ni"
+    },
+    {
+      "word": "capture",
+      "definition": "To take control or possession by force or skill.",
+      "sentence": "The photographer tried to capture the beauty of the sunset.",
+      "difficulty": "middle",
+      "age_group": "11 years",
+      "hints": [
+        "Starts with 'cap' like 'capable'.",
+        "Contains 'ture' at the end, pronounced like 'cher'.",
+        "The middle 'pt' is a tricky consonant pair."
+      ],
+      "phonetic": "ˈkæp.tʃər"
+    },
+    {
+      "word": "receipt",
+      "definition": "A written statement acknowledging that something has been received.",
+      "sentence": "Always keep your receipt after shopping in case you want to return an item.",
+      "difficulty": "middle",
+      "age_group": "11 years",
+      "hints": [
+        "The 'p' is silent after 'cei'.",
+        "Remember the order 'cei' like in 'conceive'.",
+        "Ends with 'pt'."
+      ],
+      "phonetic": "rɪˈsiːt"
+    },
+    {
+      "word": "advance",
+      "definition": "To move forward or make progress.",
+      "sentence": "The players were excited to advance to the next round of the competition.",
+      "difficulty": "middle",
+      "age_group": "11 years",
+      "hints": [
+        "Begins with 'ad'.",
+        "The ending sounds like 'vans'.",
+        "The 'c' is soft before 'e'."
+      ],
+      "phonetic": "ədˈvæns"
+    },
+    {
+      "word": "library",
+      "definition": "A place where books and other resources are kept for reading or borrowing.",
+      "sentence": "She went to the library to find books for her school project.",
+      "difficulty": "middle",
+      "age_group": "11 years",
+      "hints": [
+        "Starts with 'lib'.",
+        "Contains the tricky 'rary' ending, pronounced 'rary'.",
+        "Don't forget the 'r' after the 'b'."
+      ],
+      "phonetic": "ˈlaɪ.brɛr.i"
+    },
+    {
+      "word": "balance",
+      "definition": "An even distribution to keep steady or stable.",
+      "sentence": "It is important to balance work and play to stay healthy.",
+      "difficulty": "middle",
+      "age_group": "11 years",
+      "hints": [
+        "Starts with 'bal'.",
+        "Has 'ance' at the end, a common noun ending.",
+        "The middle has a 'c' pronounced like 's'."
+      ],
+      "phonetic": "ˈbæl.əns"
+    },
+    {
+      "word": "silence",
+      "definition": "Complete absence of sound.",
+      "sentence": "During the test, the room was filled with silence.",
+      "difficulty": "middle",
+      "age_group": "11 years",
+      "hints": [
+        "Starts with 'sil'.",
+        "Ends with 'ence', often a noun ending.",
+        "The middle letters 'le' are pronounced as one syllable."
+      ],
+      "phonetic": "ˈsaɪ.ləns"
+    },
+    {
+      "word": "frequent",
+      "definition": "Happening often or repeatedly.",
+      "sentence": "She is a frequent visitor to the science museum.",
+      "difficulty": "middle",
+      "age_group": "11 years",
+      "hints": [
+        "Begins with 'freq'.",
+        "The 'u' after 'q' is silent but always follows 'q'.",
+        "Ends with 'ent', a common adjective ending."
+      ],
+      "phonetic": "ˈfriː.kwənt"
+    },
+    {
+      "word": "pioneer",
+      "definition": "A person who is among the first to explore or develop an area or idea.",
+      "sentence": "The pioneers traveled west to settle new land.",
+      "difficulty": "middle",
+      "age_group": "11 years",
+      "hints": [
+        "Starts with 'pi'.",
+        "Has a double 'e' near the end.",
+        "Ends with 'eer', sounding like 'ear'."
+      ],
+      "phonetic": "ˌpaɪ.əˈnɪər"
+    }
+  ],
+  "metadata": {
+    "generated_at": "2025-10-02T14:51:17.657097-07:00",
+    "criteria": {
+      "difficulty_level": "middle",
+      "age_group": "11 years old",
+      "word_count": 10,
+      "include_phonetics": true,
+      "include_hints": true
+    },
+    "source": "api"
+  }
+}
