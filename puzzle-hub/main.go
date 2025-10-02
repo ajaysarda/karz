@@ -57,6 +57,60 @@ type ProblemCache struct {
 	} `json:"metadata"`
 }
 
+// Writing App Types
+type WritingAnalysisRequest struct {
+	Text       string `json:"text" binding:"required"`
+	GradeLevel int    `json:"gradeLevel" binding:"required"`
+	Title      string `json:"title,omitempty"`
+}
+
+type WritingAnalysisResponse struct {
+	OverallRating      int                 `json:"overallRating"`
+	GrammarErrors      []GrammarError      `json:"grammarErrors"`
+	VocabularyTips     []VocabularyTip     `json:"vocabularyTips"`
+	ContextSuggestions []ContextSuggestion `json:"contextSuggestions"`
+	NarrativeAnalysis  NarrativeAnalysis   `json:"narrativeAnalysis"`
+	Summary            string              `json:"summary"`
+}
+
+type GrammarError struct {
+	StartIndex  int    `json:"startIndex"`
+	EndIndex    int    `json:"endIndex"`
+	ErrorType   string `json:"errorType"`
+	Original    string `json:"original"`
+	Suggestion  string `json:"suggestion"`
+	Explanation string `json:"explanation"`
+}
+
+type VocabularyTip struct {
+	StartIndex  int      `json:"startIndex"`
+	EndIndex    int      `json:"endIndex"`
+	Original    string   `json:"original"`
+	Suggestions []string `json:"suggestions"`
+	Explanation string   `json:"explanation"`
+}
+
+type ContextSuggestion struct {
+	ParagraphIndex int    `json:"paragraphIndex"`
+	Suggestion     string `json:"suggestion"`
+	Reason         string `json:"reason"`
+}
+
+type NarrativeAnalysis struct {
+	Structure    NarrativeStructure `json:"structure"`
+	Strengths    []string           `json:"strengths"`
+	Improvements []string           `json:"improvements"`
+	Rating       int                `json:"rating"`
+}
+
+type NarrativeStructure struct {
+	HasIntroduction bool   `json:"hasIntroduction"`
+	HasRisingAction bool   `json:"hasRisingAction"`
+	HasClimax       bool   `json:"hasClimax"`
+	HasResolution   bool   `json:"hasResolution"`
+	Feedback        string `json:"feedback"`
+}
+
 // Yohaku Types
 type YohakuPuzzle struct {
 	ID         string      `json:"id"`
@@ -157,7 +211,7 @@ func NewPuzzleHub(provider string) (*PuzzleHub, error) {
 		Provider: provider,
 		CacheDir: cacheDir,
 		HTTPClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: 60 * time.Second, // Increased timeout for writing analysis
 		},
 		YohakuGenerator: &YohakuGenerator{
 			rand: rand.New(rand.NewSource(time.Now().UnixNano())),
@@ -176,11 +230,8 @@ func NewPuzzleHub(provider string) (*PuzzleHub, error) {
 			return nil, fmt.Errorf("PERPLEXITY_API_KEY environment variable is required")
 		}
 		hub.PerplexityKey = apiKey
-	} else if provider == "fallback" {
-		// Fallback mode - no API keys required, will use fallback data
-		log.Println("Running in fallback mode - no API keys required")
 	} else {
-		return nil, fmt.Errorf("provider must be 'openai', 'perplexity', or 'fallback'")
+		return nil, fmt.Errorf("AI_PROVIDER must be 'openai' or 'perplexity'. Please set PERPLEXITY_API_KEY or OPENAI_API_KEY environment variable")
 	}
 
 	return hub, nil
@@ -595,33 +646,33 @@ func (g *YohakuGenerator) GenerateGameSession(baseSettings GameSettings) YohakuG
 func (g *YohakuGenerator) getProgressiveSettings(base GameSettings, level int) GameSettings {
 	settings := base
 
-	// Progressive difficulty increases
+	// Set default range if none provided
+	if settings.Range.Min == 0 && settings.Range.Max == 0 {
+		settings.Range = NumberRange{Min: 1, Max: 10}
+	}
+
+	// Progressive difficulty increases (but preserve user's range settings)
 	switch {
 	case level <= 3:
 		// Levels 1-3: Easy
 		settings.Difficulty = "easy"
 		settings.Size = 2
-		settings.Range = NumberRange{Min: 1, Max: 5}
 	case level <= 6:
 		// Levels 4-6: Medium
 		settings.Difficulty = "medium"
 		settings.Size = 2
-		settings.Range = NumberRange{Min: 1, Max: 10}
 	case level <= 8:
 		// Levels 7-8: Hard with 2x2
 		settings.Difficulty = "hard"
 		settings.Size = 2
-		settings.Range = NumberRange{Min: 1, Max: 15}
 	case level == 9:
 		// Level 9: Medium 3x3
 		settings.Difficulty = "medium"
 		settings.Size = 3
-		settings.Range = NumberRange{Min: 1, Max: 8}
 	case level == 10:
 		// Level 10: Hard 3x3 (Boss level!)
 		settings.Difficulty = "hard"
 		settings.Size = 3
-		settings.Range = NumberRange{Min: 1, Max: 12}
 	}
 
 	// Reduce timer as difficulty increases
@@ -766,6 +817,175 @@ func (g *YohakuGenerator) getCellsToHide(difficulty string, size int) int {
 		return totalCells / 2
 	}
 }
+
+// Writing Analysis Methods
+func (h *PuzzleHub) AnalyzeWriting(request WritingAnalysisRequest) (*WritingAnalysisResponse, error) {
+	log.Printf("🖊️ Analyzing writing for grade level %d", request.GradeLevel)
+
+	prompt := h.buildWritingAnalysisPrompt(request)
+
+	var response string
+	var err error
+	maxRetries := 2
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		if attempt > 1 {
+			log.Printf("🔄 Retry attempt %d/%d", attempt, maxRetries)
+			time.Sleep(2 * time.Second) // Brief delay before retry
+		}
+
+		if h.Provider == "openai" {
+			log.Printf("🔵 Using OpenAI for writing analysis")
+			response, err = h.generateWithOpenAI(prompt)
+		} else if h.Provider == "perplexity" {
+			log.Printf("🟣 Using Perplexity for writing analysis")
+			response, err = h.generateWithPerplexity(prompt)
+		} else {
+			return nil, fmt.Errorf("invalid AI provider: %s. Must be 'openai' or 'perplexity'", h.Provider)
+		}
+
+		// If successful, break out of retry loop
+		if err == nil {
+			break
+		}
+
+		// If it's the last attempt or not a timeout error, don't retry
+		isTimeout := strings.Contains(err.Error(), "timeout") || strings.Contains(err.Error(), "deadline exceeded")
+		if attempt == maxRetries || !isTimeout {
+			break
+		}
+
+		log.Printf("⚠️ Attempt %d failed with timeout, retrying...", attempt)
+	}
+
+	if err != nil {
+		log.Printf("❌ AI analysis failed after %d attempts: %v", maxRetries, err)
+
+		// Check if it's a timeout error
+		if strings.Contains(err.Error(), "timeout") || strings.Contains(err.Error(), "deadline exceeded") {
+			return nil, fmt.Errorf("writing analysis timed out after %d attempts - %s is experiencing delays. Please try again with shorter text or wait a few minutes", maxRetries, h.Provider)
+		}
+
+		return nil, fmt.Errorf("writing analysis is not available right now due to API issues with %s. Please try again later", h.Provider)
+	}
+
+	analysis, err := h.parseWritingAnalysisResponse(response, request)
+	if err != nil {
+		log.Printf("⚠️ Failed to parse AI response: %v", err)
+		return nil, fmt.Errorf("writing analysis is not available right now due to API response parsing issues. Please try again later")
+	}
+
+	log.Printf("✅ Successfully analyzed writing")
+	return analysis, nil
+}
+
+func (h *PuzzleHub) buildWritingAnalysisPrompt(request WritingAnalysisRequest) string {
+	return fmt.Sprintf(`Analyze the following piece of writing for a grade %d student. Provide comprehensive feedback including grammar errors, vocabulary improvements, context suggestions, and narrative analysis.
+
+Title: %s
+Grade Level: %d
+Text: %s
+
+Please provide a detailed analysis in the following JSON format:
+{
+  "overallRating": 1-5,
+  "grammarErrors": [
+    {
+      "startIndex": 0,
+      "endIndex": 10,
+      "errorType": "subject-verb agreement",
+      "original": "text with error",
+      "suggestion": "corrected text",
+      "explanation": "why this is wrong and how to fix it"
+    }
+  ],
+  "vocabularyTips": [
+    {
+      "startIndex": 15,
+      "endIndex": 20,
+      "original": "simple word",
+      "suggestions": ["better word 1", "better word 2"],
+      "explanation": "why these alternatives are better"
+    }
+  ],
+  "contextSuggestions": [
+    {
+      "paragraphIndex": 0,
+      "suggestion": "Add more descriptive details about...",
+      "reason": "This would help readers visualize the scene better"
+    }
+  ],
+  "narrativeAnalysis": {
+    "structure": {
+      "hasIntroduction": true,
+      "hasRisingAction": false,
+      "hasClimax": true,
+      "hasResolution": false,
+      "feedback": "Your story has a good beginning and exciting moment, but needs more build-up and a proper ending."
+    },
+    "strengths": ["Good dialogue", "Creative characters"],
+    "improvements": ["Add more descriptive language", "Develop the ending"],
+    "rating": 3
+  },
+  "summary": "Overall feedback summary for the student"
+}
+
+Focus on:
+1. Grammar and spelling errors with clear explanations
+2. Vocabulary enhancement suggestions appropriate for grade %d
+3. Ways to add more context and detail to each paragraph
+4. Narrative structure analysis (introduction, rising action, climax, resolution)
+5. Age-appropriate feedback that encourages improvement
+6. Rate the writing from 1-5 (1=needs much work, 5=excellent)
+
+Make sure all feedback is constructive, encouraging, and appropriate for a grade %d student.`,
+		request.GradeLevel, request.Title, request.GradeLevel, request.Text, request.GradeLevel, request.GradeLevel)
+}
+
+func (h *PuzzleHub) parseWritingAnalysisResponse(response string, request WritingAnalysisRequest) (*WritingAnalysisResponse, error) {
+	var jsonStr string
+
+	// Extract JSON from response
+	if strings.Contains(response, "```json") {
+		start := strings.Index(response, "```json")
+		if start != -1 {
+			start += 7
+			end := strings.Index(response[start:], "```")
+			if end != -1 {
+				jsonStr = strings.TrimSpace(response[start : start+end])
+			}
+		}
+	} else if strings.Contains(response, "```") {
+		start := strings.Index(response, "```")
+		if start != -1 {
+			start += 3
+			end := strings.Index(response[start:], "```")
+			if end != -1 {
+				jsonStr = strings.TrimSpace(response[start : start+end])
+			}
+		}
+	} else {
+		start := strings.Index(response, "{")
+		end := strings.LastIndex(response, "}")
+		if start != -1 && end != -1 {
+			jsonStr = response[start : end+1]
+		}
+	}
+
+	if jsonStr == "" {
+		return nil, fmt.Errorf("no JSON found in response")
+	}
+
+	var analysis WritingAnalysisResponse
+	err := json.Unmarshal([]byte(jsonStr), &analysis)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse JSON: %v", err)
+	}
+
+	return &analysis, nil
+}
+
+// Fallback method removed - Writing analysis now requires AI API keys
 
 // Web server setup
 func setupRoutes(hub *PuzzleHub) *gin.Engine {
@@ -923,6 +1143,38 @@ func setupRoutes(hub *PuzzleHub) *gin.Engine {
 				"hint": "Try focusing on the cells with the smallest possible values first!",
 			})
 		})
+
+		// Writing Analysis endpoints
+		api.POST("/writing/analyze", func(c *gin.Context) {
+			var request WritingAnalysisRequest
+			if err := c.ShouldBindJSON(&request); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+
+			// Validate grade level
+			if request.GradeLevel < 1 || request.GradeLevel > 12 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Grade level must be between 1 and 12"})
+				return
+			}
+
+			// Validate text length
+			if len(strings.TrimSpace(request.Text)) < 10 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Text must be at least 10 characters long"})
+				return
+			}
+
+			analysis, err := hub.AnalyzeWriting(request)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+
+			c.JSON(http.StatusOK, gin.H{
+				"analysis": analysis,
+				"message":  "Writing analysis completed successfully!",
+			})
+		})
 	}
 
 	return r
@@ -948,7 +1200,8 @@ func main() {
 
 	provider := os.Getenv("AI_PROVIDER")
 	if provider == "" {
-		provider = "fallback"
+		// Default to perplexity if no provider specified
+		provider = "perplexity"
 	}
 
 	hub, err := NewPuzzleHub(provider)

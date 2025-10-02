@@ -55,6 +55,11 @@
                 </button>
             </li>
             <li class="nav-item" role="presentation">
+                <button class="nav-link" id="writing-tab" data-bs-toggle="tab" data-bs-target="#writing" type="button" role="tab">
+                    <i class="fas fa-pen-fancy"></i> Writing Coach
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
                 <button class="nav-link" id="profile-tab" data-bs-toggle="tab" data-bs-target="#profile" type="button" role="tab">
                     <i class="fas fa-user"></i> Profile
                 </button>
@@ -149,6 +154,52 @@
                                 <button class="btn btn-info btn-lg w-100">
                                     <i class="fas fa-play me-2"></i>
                                     Start Yohaku Math
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Writing Coach Card -->
+                    <div class="col-md-12 mb-4">
+                        <div class="card puzzle-card h-100" onclick="selectPuzzle('writing')">
+                            <div class="card-header bg-purple text-white">
+                                <h4 class="mb-0">
+                                    <i class="fas fa-pen-fancy me-2"></i>
+                                    Writing Coach
+                                </h4>
+                            </div>
+                            <div class="card-body">
+                                <div class="puzzle-preview writing-preview mb-3">
+                                    <div class="writing-sample">
+                                        <div class="sample-text">
+                                            "Once upon a time, there was a <span class="highlight-vocab">brave</span> knight who..."
+                                        </div>
+                                        <div class="feedback-preview">
+                                            <span class="badge bg-success">Grammar ✓</span>
+                                            <span class="badge bg-warning">Vocabulary</span>
+                                            <span class="badge bg-info">Context</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <p class="card-text">Improve your writing with AI-powered feedback. Features:</p>
+                                <ul class="feature-list">
+                                    <li><i class="fas fa-spell-check text-success"></i> Grammar & spelling corrections</li>
+                                    <li><i class="fas fa-book text-info"></i> Vocabulary enhancement suggestions</li>
+                                    <li><i class="fas fa-lightbulb text-warning"></i> Context & detail improvements</li>
+                                    <li><i class="fas fa-chart-line text-primary"></i> Narrative structure analysis</li>
+                                    <li><i class="fas fa-star text-warning"></i> 1-5 star rating system</li>
+                                </ul>
+                                <div class="grade-badges mt-3">
+                                    <span class="badge bg-light text-dark">Grade 1-3</span>
+                                    <span class="badge bg-light text-dark">Grade 4-6</span>
+                                    <span class="badge bg-light text-dark">Grade 7-9</span>
+                                    <span class="badge bg-light text-dark">Grade 10-12</span>
+                                </div>
+                            </div>
+                            <div class="card-footer">
+                                <button class="btn btn-purple btn-lg w-100">
+                                    <i class="fas fa-play me-2"></i>
+                                    Start Writing Coach
                                 </button>
                             </div>
                         </div>
@@ -488,6 +539,209 @@
                                         </div>
                                     </div>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Writing Coach Tab -->
+            <div class="tab-pane fade" id="writing" role="tabpanel">
+                <div class="row">
+                    <div class="col-lg-10 mx-auto">
+                        <!-- Writing Input Section -->
+                        <div class="card shadow mb-4" id="writingInputCard">
+                            <div class="card-header bg-purple text-white">
+                                <h4 class="mb-0">
+                                    <i class="fas fa-pen-fancy me-2"></i>
+                                    Writing Coach - Submit Your Story
+                                </h4>
+                            </div>
+                            <div class="card-body">
+                                <form id="writingForm">
+                                    <div class="row mb-3">
+                                        <div class="col-md-8">
+                                            <label for="writingTitle" class="form-label">
+                                                <i class="fas fa-heading me-1"></i>
+                                                Story Title (Optional)
+                                            </label>
+                                            <input type="text" class="form-control" id="writingTitle" placeholder="Enter your story title...">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label for="gradeLevel" class="form-label">
+                                                <i class="fas fa-graduation-cap me-1"></i>
+                                                Grade Level
+                                            </label>
+                                            <select class="form-select" id="gradeLevel" required>
+                                                <option value="">Select Grade</option>
+                                                <option value="1">Grade 1</option>
+                                                <option value="2">Grade 2</option>
+                                                <option value="3">Grade 3</option>
+                                                <option value="4">Grade 4</option>
+                                                <option value="5">Grade 5</option>
+                                                <option value="6">Grade 6</option>
+                                                <option value="7">Grade 7</option>
+                                                <option value="8">Grade 8</option>
+                                                <option value="9">Grade 9</option>
+                                                <option value="10">Grade 10</option>
+                                                <option value="11">Grade 11</option>
+                                                <option value="12">Grade 12</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="writingText" class="form-label">
+                                            <i class="fas fa-edit me-1"></i>
+                                            Your Writing
+                                        </label>
+                                        <div class="writing-text-container position-relative">
+                                            <textarea class="form-control" id="writingText" rows="12" 
+                                                    placeholder="Write your story, essay, or creative piece here. The AI will analyze your writing and provide helpful feedback on grammar, vocabulary, context, and narrative structure..." 
+                                                    required></textarea>
+                                        </div>
+                                        <div class="form-text">
+                                            <i class="fas fa-info-circle me-1"></i>
+                                            Minimum 10 characters. The more you write, the better feedback you'll receive!
+                                        </div>
+                                    </div>
+                                    <div class="d-grid">
+                                        <button type="submit" class="btn btn-purple btn-lg">
+                                            <i class="fas fa-magic me-2"></i>
+                                            Analyze My Writing
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+
+                        <!-- Analysis Results Section -->
+                        <div class="card shadow" id="writingResultsCard" style="display: none;">
+                            <div class="card-header bg-success text-white">
+                                <h4 class="mb-0">
+                                    <i class="fas fa-chart-line me-2"></i>
+                                    Writing Analysis Results
+                                </h4>
+                            </div>
+                            <div class="card-body">
+                                <!-- Overall Rating -->
+                                <div class="row mb-4">
+                                    <div class="col-md-6">
+                                        <div class="text-center">
+                                            <h5>Overall Rating</h5>
+                                            <div class="rating-display" id="overallRating">
+                                                <span class="rating-stars"></span>
+                                                <span class="rating-number"></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="text-center">
+                                            <h5>Narrative Structure</h5>
+                                            <div class="structure-rating" id="narrativeRating">
+                                                <span class="rating-stars"></span>
+                                                <span class="rating-number"></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Analysis Tabs -->
+                                <ul class="nav nav-pills mb-3" id="analysisTabs" role="tablist">
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link active" id="grammar-tab" data-bs-toggle="pill" data-bs-target="#grammar" type="button" role="tab">
+                                            <i class="fas fa-spell-check"></i> Grammar
+                                        </button>
+                                    </li>
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link" id="vocabulary-tab" data-bs-toggle="pill" data-bs-target="#vocabulary" type="button" role="tab">
+                                            <i class="fas fa-book"></i> Vocabulary
+                                        </button>
+                                    </li>
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link" id="context-tab" data-bs-toggle="pill" data-bs-target="#context" type="button" role="tab">
+                                            <i class="fas fa-lightbulb"></i> Context
+                                        </button>
+                                    </li>
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link" id="narrative-tab" data-bs-toggle="pill" data-bs-target="#narrative" type="button" role="tab">
+                                            <i class="fas fa-chart-line"></i> Narrative
+                                        </button>
+                                    </li>
+                                </ul>
+
+                                <!-- Analysis Tab Content -->
+                                <div class="tab-content" id="analysisTabsContent">
+                                    <!-- Grammar Tab -->
+                                    <div class="tab-pane fade show active" id="grammar" role="tabpanel">
+                                        <h5><i class="fas fa-spell-check text-success me-2"></i>Grammar & Spelling</h5>
+                                        <div id="grammarErrors"></div>
+                                    </div>
+
+                                    <!-- Vocabulary Tab -->
+                                    <div class="tab-pane fade" id="vocabulary" role="tabpanel">
+                                        <h5><i class="fas fa-book text-info me-2"></i>Vocabulary Enhancement</h5>
+                                        <div id="vocabularyTips"></div>
+                                    </div>
+
+                                    <!-- Context Tab -->
+                                    <div class="tab-pane fade" id="context" role="tabpanel">
+                                        <h5><i class="fas fa-lightbulb text-warning me-2"></i>Context & Detail Suggestions</h5>
+                                        <div id="contextSuggestions"></div>
+                                    </div>
+
+                                    <!-- Narrative Tab -->
+                                    <div class="tab-pane fade" id="narrative" role="tabpanel">
+                                        <h5><i class="fas fa-chart-line text-primary me-2"></i>Narrative Analysis</h5>
+                                        <div id="narrativeAnalysis"></div>
+                                    </div>
+                                </div>
+
+                                <!-- Summary -->
+                                <div class="mt-4">
+                                    <div class="alert alert-info" id="writingSummary">
+                                        <!-- Summary content will be populated here -->
+                                    </div>
+                                </div>
+
+                                <!-- Action Buttons -->
+                                <div class="row mt-4">
+                                    <div class="col-md-3">
+                                        <button class="btn btn-outline-secondary w-100" onclick="goBackToWritingForm()">
+                                            <i class="fas fa-arrow-left me-2"></i>
+                                            Back to Form
+                                        </button>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <button class="btn btn-outline-primary w-100" onclick="startNewWritingAnalysis()">
+                                            <i class="fas fa-plus me-2"></i>
+                                            New Analysis
+                                        </button>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <button class="btn btn-outline-success w-100" onclick="saveWritingAnalysis()">
+                                            <i class="fas fa-save me-2"></i>
+                                            Save Analysis
+                                        </button>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <button class="btn btn-outline-danger w-100" onclick="clearWritingAnalysis()">
+                                            <i class="fas fa-trash me-2"></i>
+                                            Clear Analysis
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Loading Indicator -->
+                        <div class="text-center my-4" id="writingLoadingIndicator" style="display: none;">
+                            <div class="spinner-border text-purple" role="status">
+                                <span class="visually-hidden">Analyzing...</span>
+                            </div>
+                            <div class="mt-2">
+                                <strong>Analyzing your writing...</strong>
+                                <br>
+                                <small class="text-muted">This may take a few moments</small>
                             </div>
                         </div>
                     </div>

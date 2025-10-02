@@ -48,6 +48,17 @@ document.addEventListener('DOMContentLoaded', function() {
         e.preventDefault();
         saveProfile();
     });
+    
+    // Writing form handler - use setTimeout to ensure all DOM elements are loaded
+    setTimeout(() => {
+        const writingForm = document.getElementById('writingForm');
+        if (writingForm) {
+            writingForm.addEventListener('submit', handleWritingSubmission);
+            console.log('Writing form handler attached successfully');
+        } else {
+            console.warn('Writing form not found - will try again when writing tab is activated');
+        }
+    }, 100);
 
     // Spelling word input enter key
     document.getElementById('spellingWordInput').addEventListener('keypress', function(e) {
@@ -93,6 +104,19 @@ function selectPuzzle(puzzleType) {
     } else if (puzzleType === 'yohaku') {
         const yohakuTab = new bootstrap.Tab(document.getElementById('yohaku-tab'));
         yohakuTab.show();
+    } else if (puzzleType === 'writing') {
+        const writingTab = new bootstrap.Tab(document.getElementById('writing-tab'));
+        writingTab.show();
+        
+        // Ensure writing form handler is attached when tab is activated
+        setTimeout(() => {
+            const writingForm = document.getElementById('writingForm');
+            if (writingForm && !writingForm.hasAttribute('data-handler-attached')) {
+                writingForm.addEventListener('submit', handleWritingSubmission);
+                writingForm.setAttribute('data-handler-attached', 'true');
+                console.log('Writing form handler attached on tab activation');
+            }
+        }, 100);
     }
 }
 
@@ -374,8 +398,15 @@ function handleSpellingTimerExpired() {
 
 // Yohaku Functions
 async function startYohakuGame() {
+    const minRange = parseInt(document.getElementById('yohakuMinRange').value) || 1;
+    const maxRange = parseInt(document.getElementById('yohakuMaxRange').value) || 10;
+    
     yohakuSettings = {
         operation: document.getElementById('yohakuOperation').value,
+        range: {
+            min: minRange,
+            max: maxRange
+        }
     };
     
     showLoading(true);
@@ -976,4 +1007,678 @@ function updateStats() {
     document.getElementById('spellingWordsLearned').textContent = wordsLearned;
     document.getElementById('yohakuPuzzlesSolved').textContent = puzzlesSolved;
     document.getElementById('currentStreak').textContent = currentStreak;
+}
+
+// ============================================================================
+// WRITING COACH FUNCTIONALITY
+// ============================================================================
+
+// Writing analysis variables
+let currentWritingAnalysis = null;
+let isAnalyzing = false;
+let appliedFixes = []; // Track applied fixes for highlighting
+
+// Writing form handler is now initialized in the main DOMContentLoaded listener above
+
+async function handleWritingSubmission(event) {
+    event.preventDefault();
+    
+    if (isAnalyzing) {
+        return; // Prevent multiple submissions
+    }
+    
+    const title = document.getElementById('writingTitle').value.trim();
+    const text = document.getElementById('writingText').value.trim();
+    const gradeLevel = parseInt(document.getElementById('gradeLevel').value);
+    
+    // Validation
+    if (!text || text.length < 10) {
+        showFeedback('Please write at least 10 characters for analysis.', 'error');
+        return;
+    }
+    
+    if (!gradeLevel || gradeLevel < 1 || gradeLevel > 12) {
+        showFeedback('Please select a valid grade level.', 'error');
+        return;
+    }
+    
+    try {
+        isAnalyzing = true;
+        showWritingLoadingIndicator(true);
+        
+        // Hide previous analysis button since we're doing a new analysis
+        hidePreviousAnalysisButton();
+        
+        // Show encouraging message for longer analysis
+        setTimeout(() => {
+            if (isAnalyzing) {
+                showFeedback('Analysis in progress... Perplexity is carefully reviewing your writing!', 'info');
+            }
+        }, 10000); // Show after 10 seconds
+        
+        setTimeout(() => {
+            if (isAnalyzing) {
+                showFeedback('Still analyzing... Complex writing takes more time for thorough feedback!', 'info');
+            }
+        }, 30000); // Show after 30 seconds
+        
+        const analysis = await analyzeWriting({
+            text: text,
+            gradeLevel: gradeLevel,
+            title: title || 'Untitled'
+        });
+        
+        currentWritingAnalysis = analysis;
+        displayWritingAnalysis(analysis);
+        showWritingResults();
+        
+        showFeedback('Writing analysis completed successfully!', 'success');
+        
+    } catch (error) {
+        console.error('Error analyzing writing:', error);
+        showFeedback('Failed to analyze writing. Please try again.', 'error');
+    } finally {
+        isAnalyzing = false;
+        showWritingLoadingIndicator(false);
+    }
+}
+
+async function analyzeWriting(request) {
+    const response = await fetch('/api/writing/analyze', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request)
+    });
+    
+    if (!response.ok) {
+        let errorMessage = 'Failed to analyze writing';
+        try {
+            const errorData = await response.json();
+            errorMessage = errorData.error || errorMessage;
+        } catch (parseError) {
+            // If we can't parse the error response as JSON, use the status text
+            errorMessage = `Server error: ${response.status} ${response.statusText}`;
+        }
+        throw new Error(errorMessage);
+    }
+    
+    let responseText = '';
+    try {
+        responseText = await response.text();
+        const data = JSON.parse(responseText);
+        
+        if (!data.analysis) {
+            console.error('Missing analysis in response:', data);
+            throw new Error('Invalid response format: missing analysis data');
+        }
+        return data.analysis;
+    } catch (parseError) {
+        console.error('Failed to parse response:', parseError);
+        console.error('Response text was:', responseText);
+        throw new Error(`Invalid response from server: ${parseError.message}`);
+    }
+}
+
+function displayWritingAnalysis(analysis) {
+    // Display overall rating
+    displayRating('overallRating', analysis.overallRating);
+    displayRating('narrativeRating', analysis.narrativeAnalysis.rating);
+    
+    // Display grammar errors
+    displayGrammarErrors(analysis.grammarErrors);
+    
+    // Display vocabulary tips
+    displayVocabularyTips(analysis.vocabularyTips);
+    
+    // Display context suggestions
+    displayContextSuggestions(analysis.contextSuggestions);
+    
+    // Display narrative analysis
+    displayNarrativeAnalysis(analysis.narrativeAnalysis);
+    
+    // Display summary
+    document.getElementById('writingSummary').innerHTML = `
+        <h5><i class="fas fa-summary me-2"></i>Summary</h5>
+        <p>${analysis.summary}</p>
+    `;
+}
+
+function displayRating(elementId, rating) {
+    const element = document.getElementById(elementId);
+    const starsElement = element.querySelector('.rating-stars');
+    const numberElement = element.querySelector('.rating-number');
+    
+    // Generate star display
+    let starsHTML = '';
+    for (let i = 1; i <= 5; i++) {
+        if (i <= rating) {
+            starsHTML += '<i class="fas fa-star text-warning"></i>';
+        } else {
+            starsHTML += '<i class="far fa-star text-muted"></i>';
+        }
+    }
+    
+    starsElement.innerHTML = starsHTML;
+    numberElement.textContent = `${rating}/5`;
+}
+
+function displayGrammarErrors(errors) {
+    const container = document.getElementById('grammarErrors');
+    
+    if (!errors || errors.length === 0) {
+        container.innerHTML = `
+            <div class="alert alert-success">
+                <i class="fas fa-check-circle me-2"></i>
+                Great job! No grammar errors detected.
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '<div class="grammar-errors-list">';
+    errors.forEach((error, index) => {
+        const isApplied = error.applied || false;
+        const buttonClass = isApplied ? 'btn btn-sm btn-success' : 'btn btn-sm btn-outline-success apply-fix-btn';
+        const buttonText = isApplied ? '<i class="fas fa-check me-1"></i>Applied' : '<i class="fas fa-check me-1"></i>Apply Fix';
+        const buttonDisabled = isApplied ? 'disabled' : '';
+        
+        html += `
+            <div class="card mb-3" data-error-index="${index}">
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <h6 class="text-danger">
+                                <i class="fas fa-exclamation-triangle me-1"></i>
+                                ${error.errorType}
+                            </h6>
+                            <p class="mb-2">
+                                <strong>Original:</strong> 
+                                <span class="text-danger">"${error.original}"</span>
+                            </p>
+                            <p class="mb-2">
+                                <strong>Suggestion:</strong> 
+                                <span class="text-success">"${error.suggestion}"</span>
+                            </p>
+                            <p class="text-muted small mb-0">
+                                <i class="fas fa-info-circle me-1"></i>
+                                ${error.explanation}
+                            </p>
+                        </div>
+                        <div class="col-md-4 text-end">
+                            <button class="${buttonClass}" onclick="applyGrammarFix(${index})" ${buttonDisabled}>
+                                ${buttonText}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    html += '</div>';
+    
+    container.innerHTML = html;
+}
+
+function displayVocabularyTips(tips) {
+    const container = document.getElementById('vocabularyTips');
+    
+    if (!tips || tips.length === 0) {
+        container.innerHTML = `
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle me-2"></i>
+                Your vocabulary usage looks good! Keep expanding your word choices.
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '<div class="vocabulary-tips-list">';
+    tips.forEach((tip, index) => {
+        html += `
+            <div class="card mb-3">
+                <div class="card-body">
+                    <h6 class="text-info">
+                        <i class="fas fa-book me-1"></i>
+                        Vocabulary Enhancement
+                    </h6>
+                    <p class="mb-2">
+                        <strong>Current word:</strong> 
+                        <span class="badge bg-light text-dark">"${tip.original}"</span>
+                    </p>
+                    <p class="mb-2">
+                        <strong>Better alternatives:</strong>
+                    </p>
+                    <div class="mb-2">
+                        ${tip.suggestions.map(suggestion => 
+                            `<span class="badge bg-success me-1">${suggestion}</span>`
+                        ).join('')}
+                    </div>
+                    <p class="text-muted small mb-0">
+                        <i class="fas fa-lightbulb me-1"></i>
+                        ${tip.explanation}
+                    </p>
+                </div>
+            </div>
+        `;
+    });
+    html += '</div>';
+    
+    container.innerHTML = html;
+}
+
+function displayContextSuggestions(suggestions) {
+    const container = document.getElementById('contextSuggestions');
+    
+    if (!suggestions || suggestions.length === 0) {
+        container.innerHTML = `
+            <div class="alert alert-success">
+                <i class="fas fa-check-circle me-2"></i>
+                Your writing has good context and detail!
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '<div class="context-suggestions-list">';
+    suggestions.forEach((suggestion, index) => {
+        html += `
+            <div class="card mb-3">
+                <div class="card-body">
+                    <h6 class="text-warning">
+                        <i class="fas fa-lightbulb me-1"></i>
+                        Paragraph ${suggestion.paragraphIndex + 1} Enhancement
+                    </h6>
+                    <p class="mb-2">
+                        <strong>Suggestion:</strong> ${suggestion.suggestion}
+                    </p>
+                    <p class="text-muted small mb-0">
+                        <i class="fas fa-info-circle me-1"></i>
+                        ${suggestion.reason}
+                    </p>
+                </div>
+            </div>
+        `;
+    });
+    html += '</div>';
+    
+    container.innerHTML = html;
+}
+
+function displayNarrativeAnalysis(analysis) {
+    const container = document.getElementById('narrativeAnalysis');
+    
+    const structure = analysis.structure;
+    
+    let html = `
+        <div class="narrative-analysis">
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h6 class="mb-0">
+                        <i class="fas fa-sitemap me-1"></i>
+                        Story Structure Analysis
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="structure-checklist">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" ${structure.hasIntroduction ? 'checked' : ''} disabled>
+                                    <label class="form-check-label">
+                                        Introduction/Beginning
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" ${structure.hasRisingAction ? 'checked' : ''} disabled>
+                                    <label class="form-check-label">
+                                        Rising Action/Development
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" ${structure.hasClimax ? 'checked' : ''} disabled>
+                                    <label class="form-check-label">
+                                        Climax/Main Event
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" ${structure.hasResolution ? 'checked' : ''} disabled>
+                                    <label class="form-check-label">
+                                        Resolution/Ending
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <p class="text-muted">
+                                <strong>Feedback:</strong> ${structure.feedback}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header bg-success text-white">
+                            <h6 class="mb-0">
+                                <i class="fas fa-thumbs-up me-1"></i>
+                                Strengths
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <ul class="list-unstyled mb-0">
+                                ${analysis.strengths.map(strength => 
+                                    `<li><i class="fas fa-check text-success me-2"></i>${strength}</li>`
+                                ).join('')}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header bg-info text-white">
+                            <h6 class="mb-0">
+                                <i class="fas fa-arrow-up me-1"></i>
+                                Areas for Improvement
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <ul class="list-unstyled mb-0">
+                                ${analysis.improvements.map(improvement => 
+                                    `<li><i class="fas fa-arrow-right text-info me-2"></i>${improvement}</li>`
+                                ).join('')}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    container.innerHTML = html;
+}
+
+function showWritingResults() {
+    document.getElementById('writingInputCard').style.display = 'none';
+    document.getElementById('writingResultsCard').style.display = 'block';
+}
+
+function showWritingLoadingIndicator(show) {
+    document.getElementById('writingLoadingIndicator').style.display = show ? 'block' : 'none';
+}
+
+function startNewWritingAnalysis() {
+    // Reset form
+    document.getElementById('writingForm').reset();
+    
+    // Show input card, hide results
+    document.getElementById('writingInputCard').style.display = 'block';
+    document.getElementById('writingResultsCard').style.display = 'none';
+    
+    // Clear current analysis and applied fixes
+    currentWritingAnalysis = null;
+    appliedFixes = [];
+    
+    // Clear highlights
+    const highlightOverlay = document.getElementById('writingTextHighlights');
+    if (highlightOverlay) {
+        highlightOverlay.remove();
+    }
+    
+    // Hide previous analysis button
+    hidePreviousAnalysisButton();
+    
+    showFeedback('Ready for new writing analysis!', 'info');
+}
+
+function saveWritingAnalysis() {
+    if (!currentWritingAnalysis) {
+        showFeedback('No analysis to save.', 'error');
+        return;
+    }
+    
+    // Save to localStorage
+    const savedAnalyses = JSON.parse(localStorage.getItem('writingAnalyses') || '[]');
+    const analysisToSave = {
+        ...currentWritingAnalysis,
+        timestamp: new Date().toISOString(),
+        title: document.getElementById('writingTitle').value.trim() || 'Untitled',
+        gradeLevel: parseInt(document.getElementById('gradeLevel').value)
+    };
+    
+    savedAnalyses.push(analysisToSave);
+    localStorage.setItem('writingAnalyses', JSON.stringify(savedAnalyses));
+    
+    showFeedback('Writing analysis saved successfully!', 'success');
+}
+
+function applyGrammarFix(errorIndex) {
+    if (!currentWritingAnalysis || !currentWritingAnalysis.grammarErrors[errorIndex]) {
+        return;
+    }
+    
+    const error = currentWritingAnalysis.grammarErrors[errorIndex];
+    
+    // Get the current text from the form (it might have been updated by previous fixes)
+    const textArea = document.getElementById('writingText');
+    let currentText = textArea.value;
+    
+    // Find the error text in the current content (it might have moved due to previous fixes)
+    const errorPosition = currentText.indexOf(error.original);
+    if (errorPosition === -1) {
+        showFeedback(`Error text "${error.original}" not found. It may have already been fixed.`, 'warning');
+        return;
+    }
+    
+    // Replace the error with the suggestion
+    const newText = currentText.substring(0, errorPosition) + 
+                   error.suggestion + 
+                   currentText.substring(errorPosition + error.original.length);
+    
+    textArea.value = newText;
+    
+    // Track the applied fix for highlighting
+    const appliedFix = {
+        errorIndex: errorIndex,
+        original: error.original,
+        suggestion: error.suggestion,
+        startPosition: errorPosition,
+        endPosition: errorPosition + error.suggestion.length,
+        timestamp: Date.now()
+    };
+    
+    // Remove any existing fix for this error index
+    appliedFixes = appliedFixes.filter(fix => fix.errorIndex !== errorIndex);
+    appliedFixes.push(appliedFix);
+    
+    // Update the analysis to reflect the change
+    currentWritingAnalysis.grammarErrors[errorIndex].applied = true;
+    
+    // Update the UI to show the fix was applied
+    const errorCard = document.querySelector(`[data-error-index="${errorIndex}"]`);
+    if (errorCard) {
+        errorCard.classList.add('fix-applied');
+        const applyButton = errorCard.querySelector('.apply-fix-btn');
+        if (applyButton) {
+            applyButton.innerHTML = '<i class="fas fa-check me-1"></i>Applied';
+            applyButton.disabled = true;
+            applyButton.classList.remove('btn-outline-success');
+            applyButton.classList.add('btn-success');
+        }
+    }
+    
+    // Add visual highlighting to the textarea
+    highlightAppliedFixes();
+    
+    showFeedback(`Applied fix: "${error.original}" → "${error.suggestion}"`, 'success');
+}
+
+function highlightAppliedFixes() {
+    const textArea = document.getElementById('writingText');
+    if (!textArea || appliedFixes.length === 0) {
+        return;
+    }
+    
+    // Create or update the highlight overlay
+    let highlightOverlay = document.getElementById('writingTextHighlights');
+    if (!highlightOverlay) {
+        highlightOverlay = document.createElement('div');
+        highlightOverlay.id = 'writingTextHighlights';
+        highlightOverlay.className = 'writing-text-highlights';
+        
+        // Insert the overlay into the container, behind the textarea
+        const container = textArea.parentNode;
+        container.insertBefore(highlightOverlay, textArea);
+        
+        // Add event listeners to sync scrolling and resizing
+        textArea.addEventListener('scroll', syncHighlightOverlay);
+        textArea.addEventListener('input', updateHighlightPositions);
+    }
+    
+    // Update highlight positions and content
+    updateHighlightOverlay();
+}
+
+function syncHighlightOverlay() {
+    const textArea = document.getElementById('writingText');
+    const highlightOverlay = document.getElementById('writingTextHighlights');
+    
+    if (textArea && highlightOverlay) {
+        highlightOverlay.scrollTop = textArea.scrollTop;
+        highlightOverlay.scrollLeft = textArea.scrollLeft;
+    }
+}
+
+function updateHighlightPositions() {
+    // Recalculate positions when text changes
+    setTimeout(updateHighlightOverlay, 0);
+}
+
+function updateHighlightOverlay() {
+    const textArea = document.getElementById('writingText');
+    const highlightOverlay = document.getElementById('writingTextHighlights');
+    
+    if (!textArea || !highlightOverlay || appliedFixes.length === 0) {
+        if (highlightOverlay) {
+            highlightOverlay.innerHTML = '';
+        }
+        return;
+    }
+    
+    const currentText = textArea.value;
+    let highlightedText = '';
+    let lastIndex = 0;
+    
+    // Sort fixes by position to avoid overlapping
+    const sortedFixes = [...appliedFixes].sort((a, b) => {
+        // Find current positions of the fixes in the text
+        const aPos = currentText.indexOf(a.suggestion, lastIndex);
+        const bPos = currentText.indexOf(b.suggestion, lastIndex);
+        return aPos - bPos;
+    });
+    
+    sortedFixes.forEach(fix => {
+        const fixPosition = currentText.indexOf(fix.suggestion, lastIndex);
+        if (fixPosition !== -1) {
+            // Add text before the fix
+            highlightedText += escapeHtml(currentText.substring(lastIndex, fixPosition));
+            
+            // Add highlighted fix
+            highlightedText += `<span class="applied-fix-highlight" title="Fixed: ${escapeHtml(fix.original)} → ${escapeHtml(fix.suggestion)}">${escapeHtml(fix.suggestion)}</span>`;
+            
+            lastIndex = fixPosition + fix.suggestion.length;
+        }
+    });
+    
+    // Add remaining text
+    highlightedText += escapeHtml(currentText.substring(lastIndex));
+    
+    highlightOverlay.innerHTML = highlightedText;
+    
+    // Sync overlay scrolling with textarea
+    highlightOverlay.scrollTop = textArea.scrollTop;
+    highlightOverlay.scrollLeft = textArea.scrollLeft;
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function goBackToWritingForm() {
+    // Show input card, hide results (but keep analysis in memory)
+    document.getElementById('writingInputCard').style.display = 'block';
+    document.getElementById('writingResultsCard').style.display = 'none';
+    
+    // Restore highlights in the form
+    highlightAppliedFixes();
+    
+    // Add a button to show the previous analysis if it exists
+    if (currentWritingAnalysis) {
+        showPreviousAnalysisButton();
+    }
+    
+    // The form already contains the updated text with applied fixes
+    showFeedback('Returned to writing form with your fixes applied!', 'info');
+}
+
+function showPreviousAnalysisButton() {
+    // Check if button already exists
+    if (document.getElementById('showPreviousAnalysisBtn')) {
+        return;
+    }
+    
+    // Create and add the "Show Previous Analysis" button
+    const buttonContainer = document.querySelector('#writingInputCard .card-body .d-grid');
+    if (buttonContainer) {
+        const showAnalysisBtn = document.createElement('button');
+        showAnalysisBtn.type = 'button';
+        showAnalysisBtn.id = 'showPreviousAnalysisBtn';
+        showAnalysisBtn.className = 'btn btn-outline-info btn-lg mt-2';
+        showAnalysisBtn.innerHTML = '<i class="fas fa-eye me-2"></i>Show Previous Analysis';
+        showAnalysisBtn.onclick = showPreviousAnalysis;
+        
+        buttonContainer.appendChild(showAnalysisBtn);
+    }
+}
+
+function showPreviousAnalysis() {
+    if (currentWritingAnalysis) {
+        // Show the results card with existing analysis
+        document.getElementById('writingInputCard').style.display = 'none';
+        document.getElementById('writingResultsCard').style.display = 'block';
+        showFeedback('Showing your previous analysis results!', 'info');
+    }
+}
+
+function hidePreviousAnalysisButton() {
+    const button = document.getElementById('showPreviousAnalysisBtn');
+    if (button) {
+        button.remove();
+    }
+}
+
+function clearWritingAnalysis() {
+    // Clear the analysis data
+    currentWritingAnalysis = null;
+    appliedFixes = []; // Clear applied fixes
+    
+    // Go back to the form
+    document.getElementById('writingInputCard').style.display = 'block';
+    document.getElementById('writingResultsCard').style.display = 'none';
+    
+    // Clear highlights
+    const highlightOverlay = document.getElementById('writingTextHighlights');
+    if (highlightOverlay) {
+        highlightOverlay.remove();
+    }
+    
+    // Hide the previous analysis button
+    hidePreviousAnalysisButton();
+    
+    showFeedback('Analysis cleared successfully!', 'success');
 }
