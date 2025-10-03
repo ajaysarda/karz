@@ -1207,17 +1207,19 @@ body {
 }
 
 .mini-calendar .calendar-day {
-    min-height: 45px;
-    padding: 3px;
+    min-height: 80px;
+    padding: 15px 5px 5px 5px;
     border-right: 1px solid #e9ecef;
     border-bottom: 1px solid #e9ecef;
     position: relative;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
+    align-items: flex-end;
     background: white;
     transition: all 0.3s ease;
     cursor: pointer;
+    text-align: right;
 }
 
 .mini-calendar .calendar-day:last-child {
@@ -1225,21 +1227,20 @@ body {
 }
 
 .mini-calendar .calendar-day:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+    outline: 2px solid #007bff;
     z-index: 10;
 }
 
 .mini-calendar .calendar-day.profit-day:hover {
-    box-shadow: 0 6px 12px rgba(76, 175, 80, 0.4);
+    outline-color: #28a745;
 }
 
 .mini-calendar .calendar-day.loss-day:hover {
-    box-shadow: 0 6px 12px rgba(220, 53, 69, 0.4);
+    outline-color: #dc3545;
 }
 
 .mini-calendar .calendar-day.break-even:hover {
-    box-shadow: 0 6px 12px rgba(255, 193, 7, 0.4);
+    outline-color: #ffc107;
 }
 
 .mini-calendar .calendar-day.other-month {
@@ -1255,9 +1256,12 @@ body {
 }
 
 .day-number {
-    font-size: 1.1em;
+    font-size: 0.9em;
     font-weight: 600;
-    align-self: flex-start;
+    color: #444;
+    position: absolute;
+    top: 5px;
+    right: 5px;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
@@ -1278,58 +1282,56 @@ body {
 
 /* New trading calendar specific styles - Enhanced typography */
 .day-pl {
-    font-size: 1.2em;
+    font-size: 1.1em;
     font-weight: 700;
-    text-align: center;
-    margin-top: 5px;
+    text-align: right;
+    padding: 5px 0;
+    margin-top: 20px;
     color: inherit;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    letter-spacing: 0.3px;
 }
 
 .day-trades {
-    font-size: 0.85em;
-    text-align: center;
-    margin-top: 3px;
-    color: rgba(0, 0, 0, 0.7);
+    font-size: 0.75em;
+    text-align: right;
+    margin-top: 2px;
+    color: rgba(0, 0, 0, 0.6);
     font-weight: 500;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
-/* Trading-specific styles - Enhanced with better visual feedback */
+/* Trading-specific styles - Clean diverging color palette */
 .mini-calendar .calendar-day.profit-day {
-    background-color: #e6ffe6 !important; /* Light green background */
-    border: 2px solid #4CAF50 !important; /* Green border */
-    color: #155724 !important; /* Dark green text */
+    background-color: #e6ffe6 !important; /* Very light green */
 }
 
 .mini-calendar .calendar-day.profit-day .day-pl {
-    color: #28a745;
+    color: #28a745; /* Dark green text */
     font-weight: 700;
 }
 
 .mini-calendar .calendar-day.profit-day .day-trades {
-    color: rgba(21, 87, 36, 0.7);
+    color: rgba(40, 167, 69, 0.7);
 }
 
 .mini-calendar .calendar-day.loss-day {
-    background-color: #ffe6e6 !important; /* Light red background */
-    border: 2px solid #dc3545 !important; /* Red border */
-    color: #721c24 !important; /* Dark red text */
+    background-color: #ffe6e6 !important; /* Very light red */
 }
 
 .mini-calendar .calendar-day.loss-day .day-pl {
-    color: #dc3545;
+    color: #dc3545; /* Dark red text */
     font-weight: 700;
 }
 
 .mini-calendar .calendar-day.loss-day .day-trades {
-    color: rgba(114, 28, 36, 0.7);
+    color: rgba(220, 53, 69, 0.7);
 }
 
 .mini-calendar .calendar-day.no-activity {
-    background-color: #ffffff;
-    border: 1px solid #e9ecef;
+    background-color: #f7f7f7; /* Light neutral gray */
+}
+
+.mini-calendar .calendar-day.no-activity .day-pl {
     color: #6c757d;
 }
 
@@ -1339,18 +1341,16 @@ body {
 
 /* Break-even day (when P&L is exactly $0.00 but trades exist) */
 .mini-calendar .calendar-day.break-even {
-    background-color: #fffbe6 !important; /* Light yellow background */
-    border: 2px solid #ffc107 !important; /* Yellow border */
-    color: #856404 !important;
+    background-color: #f2f2f2 !important; /* Light gray neutral */
 }
 
 .mini-calendar .calendar-day.break-even .day-pl {
-    color: #ffc107;
+    color: #6c757d; /* Muted gray text */
     font-weight: 700;
 }
 
 .mini-calendar .calendar-day.break-even .day-trades {
-    color: rgba(133, 100, 4, 0.7);
+    color: rgba(108, 117, 125, 0.7);
 }
 
 /* Legacy styles for backward compatibility */
