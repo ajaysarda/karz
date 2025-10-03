@@ -3681,12 +3681,19 @@ function generateMiniCalendar(detailedData, calendarType, month) {
                     
                     console.log(`Day ${dateStr} (current month) metrics:`, metrics);
                     
-                    // Set background color based on P&L
-                    if (metrics.hasActivity) {
-                        dayClass += metrics.totalPL > 0 ? ' profit-day' : ' loss-day';
+                // Set background color based on P&L
+                if (metrics.hasActivity) {
+                    if (metrics.totalPL > 0) {
+                        dayClass += ' profit-day';
+                    } else if (metrics.totalPL < 0) {
+                        dayClass += ' loss-day';
                     } else {
-                        dayClass += ' no-activity';
+                        // Break-even: traded but P&L is exactly $0.00
+                        dayClass += ' break-even';
                     }
+                } else {
+                    dayClass += ' no-activity';
+                }
                     
                     // Format P&L display
                     const plDisplay = metrics.totalPL >= 0 ? `$${metrics.totalPL.toFixed(2)}` : `-$${Math.abs(metrics.totalPL).toFixed(2)}`;
