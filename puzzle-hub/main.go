@@ -14,6 +14,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/dynamodb"
+	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/sessions"
@@ -189,6 +194,112 @@ type LoginResponse struct {
 	Message string `json:"message,omitempty"`
 }
 
+// Custom Logging System Types
+type LogType struct {
+	ID          string     `json:"id" dynamodbav:"id"`
+	UserID      string     `json:"user_id" dynamodbav:"user_id"`
+	Name        string     `json:"name" dynamodbav:"name"`
+	Description string     `json:"description" dynamodbav:"description"`
+	Color       string     `json:"color" dynamodbav:"color"`
+	Icon        string     `json:"icon" dynamodbav:"icon"`
+	CreatedAt   time.Time  `json:"created_at" dynamodbav:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at" dynamodbav:"updated_at"`
+	Fields      []LogField `json:"fields,omitempty" dynamodbav:"fields"`
+}
+
+type FieldType string
+
+const (
+	FieldTypeText     FieldType = "text"
+	FieldTypeNumber   FieldType = "number"
+	FieldTypeDate     FieldType = "date"
+	FieldTypeTime     FieldType = "time"
+	FieldTypeSelect   FieldType = "select"
+	FieldTypeCheckbox FieldType = "checkbox"
+	FieldTypeTextarea FieldType = "textarea"
+)
+
+type LogField struct {
+	ID           string    `json:"id" dynamodbav:"id"`
+	LogTypeID    string    `json:"log_type_id" dynamodbav:"log_type_id"`
+	FieldName    string    `json:"field_name" dynamodbav:"field_name"`
+	FieldType    FieldType `json:"field_type" dynamodbav:"field_type"`
+	Required     bool      `json:"required" dynamodbav:"required"`
+	Options      string    `json:"options" dynamodbav:"options"` // JSON string for select options
+	DefaultValue string    `json:"default_value" dynamodbav:"default_value"`
+	DisplayOrder int       `json:"display_order" dynamodbav:"display_order"`
+}
+
+type LogEntry struct {
+	ID        string                 `json:"id" dynamodbav:"id"`
+	LogTypeID string                 `json:"log_type_id" dynamodbav:"log_type_id"`
+	UserID    string                 `json:"user_id" dynamodbav:"user_id"`
+	EntryDate string                 `json:"entry_date" dynamodbav:"entry_date"` // Store as YYYY-MM-DD string
+	CreatedAt time.Time              `json:"created_at" dynamodbav:"created_at"`
+	UpdatedAt time.Time              `json:"updated_at" dynamodbav:"updated_at"`
+	Values    map[string]interface{} `json:"values,omitempty" dynamodbav:"values"`
+	LogType   *LogType               `json:"log_type,omitempty" dynamodbav:"-"`
+}
+
+// EntryValue is no longer needed with DynamoDB as we store values directly in LogEntry
+
+type LogAnalytics struct {
+	LogTypeID     string                 `json:"log_type_id"`
+	LogTypeName   string                 `json:"log_type_name"`
+	TotalEntries  int                    `json:"total_entries"`
+	ThisMonth     int                    `json:"this_month"`
+	ThisWeek      int                    `json:"this_week"`
+	DailyActivity map[string]interface{} `json:"daily_activity"` // Date -> summary data
+	MonthlyTrend  []MonthlyData          `json:"monthly_trend"`
+}
+
+type MonthlyData struct {
+	Month   string      `json:"month"`
+	Count   int         `json:"count"`
+	Summary interface{} `json:"summary"` // Aggregated data (sum, avg, etc.)
+}
+
+type CreateLogFieldRequest struct {
+	FieldName    string `json:"field_name" binding:"required"`
+	FieldType    string `json:"field_type" binding:"required"`
+	Required     bool   `json:"required"`
+	DefaultValue string `json:"default_value"`
+	Options      string `json:"options"`
+}
+
+type CreateLogTypeRequest struct {
+	Name        string                  `json:"name" binding:"required"`
+	Description string                  `json:"description"`
+	Color       string                  `json:"color"`
+	Icon        string                  `json:"icon"`
+	Fields      []CreateLogFieldRequest `json:"fields"`
+}
+
+type CreateLogEntryRequest struct {
+	LogTypeID string                 `json:"log_type_id" binding:"required"`
+	EntryDate string                 `json:"entry_date" binding:"required"` // YYYY-MM-DD format
+	Values    map[string]interface{} `json:"values" binding:"required"`
+}
+
+type SuggestFieldsRequest struct {
+	LogTypeName string `json:"log_type_name" binding:"required"`
+	Description string `json:"description"`
+}
+
+type SuggestedField struct {
+	FieldName    string `json:"field_name"`
+	FieldType    string `json:"field_type"`
+	Required     bool   `json:"required"`
+	DefaultValue string `json:"default_value"`
+	Options      string `json:"options"`
+	Description  string `json:"description"`
+}
+
+type SuggestFieldsResponse struct {
+	SuggestedFields []SuggestedField `json:"suggested_fields"`
+	Explanation     string           `json:"explanation"`
+}
+
 // Unified Generator
 type PuzzleHub struct {
 	OpenAIClient    *openai.Client
@@ -199,7 +310,8 @@ type PuzzleHub struct {
 	TotalCost       float64
 	YohakuGenerator *YohakuGenerator
 	AuthConfig      *AuthConfig
-	Users           map[string]*User // Simple in-memory user store
+	Users           map[string]*User   // Simple in-memory user store
+	DynamoDB        *dynamodb.DynamoDB // AWS DynamoDB for logging system
 }
 
 type YohakuGenerator struct {
@@ -238,10 +350,234 @@ type PerplexityResponse struct {
 }
 
 // NewPuzzleHub creates a new unified puzzle generator
+// Database initialization functions
+func initializeDynamoDB() (*dynamodb.DynamoDB, error) {
+	// AWS credentials from environment variables
+	awsAccessKey := os.Getenv("AWS_ACCESS_KEY_ID")
+	awsSecretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
+	awsRegion := os.Getenv("AWS_REGION")
+
+	// Validate required AWS credentials
+	if awsAccessKey == "" {
+		return nil, fmt.Errorf("AWS_ACCESS_KEY_ID environment variable is required")
+	}
+	if awsSecretKey == "" {
+		return nil, fmt.Errorf("AWS_SECRET_ACCESS_KEY environment variable is required")
+	}
+	if awsRegion == "" {
+		awsRegion = "us-east-1" // Default region
+	}
+
+	// Create AWS session
+	sess, err := session.NewSession(&aws.Config{
+		Region:      aws.String(awsRegion),
+		Credentials: credentials.NewStaticCredentials(awsAccessKey, awsSecretKey, ""),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create AWS session: %v", err)
+	}
+
+	// Create DynamoDB client
+	svc := dynamodb.New(sess)
+
+	// Create tables if they don't exist
+	if err := createDynamoDBTables(svc); err != nil {
+		return nil, fmt.Errorf("failed to create DynamoDB tables: %v", err)
+	}
+
+	log.Println("📊 DynamoDB initialized successfully")
+	return svc, nil
+}
+
+func createDynamoDBTables(svc *dynamodb.DynamoDB) error {
+	// Table names
+	tables := []struct {
+		name   string
+		schema *dynamodb.CreateTableInput
+	}{
+		{
+			name: "puzzle-hub-log-types",
+			schema: &dynamodb.CreateTableInput{
+				TableName: aws.String("puzzle-hub-log-types"),
+				KeySchema: []*dynamodb.KeySchemaElement{
+					{
+						AttributeName: aws.String("id"),
+						KeyType:       aws.String("HASH"),
+					},
+				},
+				AttributeDefinitions: []*dynamodb.AttributeDefinition{
+					{
+						AttributeName: aws.String("id"),
+						AttributeType: aws.String("S"),
+					},
+					{
+						AttributeName: aws.String("user_id"),
+						AttributeType: aws.String("S"),
+					},
+				},
+				GlobalSecondaryIndexes: []*dynamodb.GlobalSecondaryIndex{
+					{
+						IndexName: aws.String("user-id-index"),
+						KeySchema: []*dynamodb.KeySchemaElement{
+							{
+								AttributeName: aws.String("user_id"),
+								KeyType:       aws.String("HASH"),
+							},
+						},
+						Projection: &dynamodb.Projection{
+							ProjectionType: aws.String("ALL"),
+						},
+						ProvisionedThroughput: &dynamodb.ProvisionedThroughput{
+							ReadCapacityUnits:  aws.Int64(5),
+							WriteCapacityUnits: aws.Int64(5),
+						},
+					},
+				},
+				ProvisionedThroughput: &dynamodb.ProvisionedThroughput{
+					ReadCapacityUnits:  aws.Int64(5),
+					WriteCapacityUnits: aws.Int64(5),
+				},
+			},
+		},
+		{
+			name: "puzzle-hub-log-fields",
+			schema: &dynamodb.CreateTableInput{
+				TableName: aws.String("puzzle-hub-log-fields"),
+				KeySchema: []*dynamodb.KeySchemaElement{
+					{
+						AttributeName: aws.String("id"),
+						KeyType:       aws.String("HASH"),
+					},
+				},
+				AttributeDefinitions: []*dynamodb.AttributeDefinition{
+					{
+						AttributeName: aws.String("id"),
+						AttributeType: aws.String("S"),
+					},
+					{
+						AttributeName: aws.String("log_type_id"),
+						AttributeType: aws.String("S"),
+					},
+				},
+				GlobalSecondaryIndexes: []*dynamodb.GlobalSecondaryIndex{
+					{
+						IndexName: aws.String("log-type-id-index"),
+						KeySchema: []*dynamodb.KeySchemaElement{
+							{
+								AttributeName: aws.String("log_type_id"),
+								KeyType:       aws.String("HASH"),
+							},
+						},
+						Projection: &dynamodb.Projection{
+							ProjectionType: aws.String("ALL"),
+						},
+						ProvisionedThroughput: &dynamodb.ProvisionedThroughput{
+							ReadCapacityUnits:  aws.Int64(5),
+							WriteCapacityUnits: aws.Int64(5),
+						},
+					},
+				},
+				ProvisionedThroughput: &dynamodb.ProvisionedThroughput{
+					ReadCapacityUnits:  aws.Int64(5),
+					WriteCapacityUnits: aws.Int64(5),
+				},
+			},
+		},
+		{
+			name: "puzzle-hub-log-entries",
+			schema: &dynamodb.CreateTableInput{
+				TableName: aws.String("puzzle-hub-log-entries"),
+				KeySchema: []*dynamodb.KeySchemaElement{
+					{
+						AttributeName: aws.String("id"),
+						KeyType:       aws.String("HASH"),
+					},
+				},
+				AttributeDefinitions: []*dynamodb.AttributeDefinition{
+					{
+						AttributeName: aws.String("id"),
+						AttributeType: aws.String("S"),
+					},
+					{
+						AttributeName: aws.String("user_id"),
+						AttributeType: aws.String("S"),
+					},
+					{
+						AttributeName: aws.String("entry_date"),
+						AttributeType: aws.String("S"),
+					},
+				},
+				GlobalSecondaryIndexes: []*dynamodb.GlobalSecondaryIndex{
+					{
+						IndexName: aws.String("user-date-index"),
+						KeySchema: []*dynamodb.KeySchemaElement{
+							{
+								AttributeName: aws.String("user_id"),
+								KeyType:       aws.String("HASH"),
+							},
+							{
+								AttributeName: aws.String("entry_date"),
+								KeyType:       aws.String("RANGE"),
+							},
+						},
+						Projection: &dynamodb.Projection{
+							ProjectionType: aws.String("ALL"),
+						},
+						ProvisionedThroughput: &dynamodb.ProvisionedThroughput{
+							ReadCapacityUnits:  aws.Int64(5),
+							WriteCapacityUnits: aws.Int64(5),
+						},
+					},
+				},
+				ProvisionedThroughput: &dynamodb.ProvisionedThroughput{
+					ReadCapacityUnits:  aws.Int64(5),
+					WriteCapacityUnits: aws.Int64(5),
+				},
+			},
+		},
+	}
+
+	// Create each table if it doesn't exist
+	for _, table := range tables {
+		// Check if table exists
+		_, err := svc.DescribeTable(&dynamodb.DescribeTableInput{
+			TableName: aws.String(table.name),
+		})
+
+		if err != nil {
+			// Table doesn't exist, create it
+			log.Printf("Creating DynamoDB table: %s", table.name)
+			_, err = svc.CreateTable(table.schema)
+			if err != nil {
+				return fmt.Errorf("failed to create table %s: %v", table.name, err)
+			}
+
+			// Wait for table to be active
+			log.Printf("Waiting for table %s to be active...", table.name)
+			err = svc.WaitUntilTableExists(&dynamodb.DescribeTableInput{
+				TableName: aws.String(table.name),
+			})
+			if err != nil {
+				return fmt.Errorf("failed to wait for table %s: %v", table.name, err)
+			}
+		} else {
+			log.Printf("DynamoDB table %s already exists", table.name)
+		}
+	}
+
+	return nil
+}
+
 func NewPuzzleHub(provider string) (*PuzzleHub, error) {
 	cacheDir := "cache"
 	if err := os.MkdirAll(cacheDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create cache directory: %v", err)
+	}
+
+	// Initialize DynamoDB
+	dynamoDB, err := initializeDynamoDB()
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize DynamoDB: %v", err)
 	}
 
 	hub := &PuzzleHub{
@@ -253,6 +589,7 @@ func NewPuzzleHub(provider string) (*PuzzleHub, error) {
 		YohakuGenerator: &YohakuGenerator{
 			rand: rand.New(rand.NewSource(time.Now().UnixNano())),
 		},
+		DynamoDB: dynamoDB,
 	}
 
 	if provider == "openai" {
@@ -1151,12 +1488,6 @@ func setupRoutes(hub *PuzzleHub) *gin.Engine {
 		})
 	})
 
-	r.GET("/privacy", func(c *gin.Context) {
-		c.HTML(http.StatusOK, "privacy.html", gin.H{
-			"title": "Privacy Policy - Puzzle Hub",
-		})
-	})
-
 	// Favicon
 	r.GET("/favicon.ico", func(c *gin.Context) {
 		c.Status(http.StatusNoContent)
@@ -1332,6 +1663,24 @@ func setupRoutes(hub *PuzzleHub) *gin.Engine {
 				"message":  "Writing analysis completed successfully!",
 			})
 		})
+
+		// Custom Logging System endpoints
+		// Log Types
+		api.GET("/logs/types", hub.getLogTypes)
+		api.POST("/logs/types/suggest-fields", hub.suggestLogFields)
+		api.POST("/logs/types", hub.createLogType)
+		api.PUT("/logs/types/:id", hub.updateLogType)
+		api.DELETE("/logs/types/:id", hub.deleteLogType)
+
+		// Log Entries
+		api.GET("/logs/entries", hub.getLogEntries)
+		api.POST("/logs/entries", hub.createLogEntry)
+		api.PUT("/logs/entries/:id", hub.updateLogEntry)
+		api.DELETE("/logs/entries/:id", hub.deleteLogEntry)
+
+		// Analytics
+		api.GET("/logs/analytics", hub.getLogAnalytics)
+		api.GET("/logs/analytics/:logTypeId", hub.getLogTypeAnalytics)
 	}
 
 	return r
@@ -1455,18 +1804,24 @@ func (h *PuzzleHub) getUserFromGoogle(accessToken string) (*GoogleUserInfo, erro
 }
 
 func (h *PuzzleHub) createOrUpdateUser(googleUser *GoogleUserInfo) *User {
+	// Use Google ID as the stable user ID
+	// This ensures the same user gets the same ID across sessions
+	stableUserID := googleUser.ID
+
 	// Check if user already exists
-	for _, user := range h.Users {
-		if user.GoogleID == googleUser.ID {
-			// Update last login
-			user.LastLoginAt = time.Now()
-			return user
-		}
+	if user, exists := h.Users[stableUserID]; exists {
+		// Update user info and last login
+		user.Email = googleUser.Email
+		user.Name = googleUser.Name
+		user.Picture = googleUser.Picture
+		user.LastLoginAt = time.Now()
+		log.Printf("✅ Existing user logged in")
+		return user
 	}
 
 	// Create new user
 	user := &User{
-		ID:          fmt.Sprintf("user_%d", time.Now().UnixNano()),
+		ID:          stableUserID,
 		Email:       googleUser.Email,
 		Name:        googleUser.Name,
 		Picture:     googleUser.Picture,
@@ -1475,18 +1830,23 @@ func (h *PuzzleHub) createOrUpdateUser(googleUser *GoogleUserInfo) *User {
 		LastLoginAt: time.Now(),
 	}
 
-	h.Users[user.ID] = user
+	h.Users[stableUserID] = user
+	log.Printf("🆕 New user created")
 	return user
 }
 
 // Middleware for authentication
 func (h *PuzzleHub) authMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Skip auth for public endpoints
+		// Skip auth for public endpoints and puzzle games
 		path := c.Request.URL.Path
 		if strings.HasPrefix(path, "/static/") ||
 			strings.HasPrefix(path, "/auth/") ||
+			strings.HasPrefix(path, "/api/spelling/") ||
+			strings.HasPrefix(path, "/api/yohaku/") ||
+			strings.HasPrefix(path, "/api/writing/") ||
 			path == "/" ||
+			path == "/terms" ||
 			path == "/favicon.ico" {
 			c.Next()
 			return
@@ -1519,6 +1879,848 @@ func (h *PuzzleHub) authMiddleware() gin.HandlerFunc {
 		c.Set("user", user)
 		c.Next()
 	}
+}
+
+// Custom Logging System Handlers
+
+// Log Types handlers
+func (h *PuzzleHub) getLogTypes(c *gin.Context) {
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
+		return
+	}
+	userObj := user.(*User)
+
+	log.Printf("🔍 Fetching log types for user")
+
+	// Query log types for the user
+	result, err := h.DynamoDB.Query(&dynamodb.QueryInput{
+		TableName:              aws.String("puzzle-hub-log-types"),
+		IndexName:              aws.String("user-id-index"),
+		KeyConditionExpression: aws.String("user_id = :user_id"),
+		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+			":user_id": {
+				S: aws.String(userObj.ID),
+			},
+		},
+	})
+	if err != nil {
+		log.Printf("❌ Error querying log types: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch log types"})
+		return
+	}
+
+	log.Printf("📋 Found %d log type items in DynamoDB", len(result.Items))
+
+	var logTypes []LogType
+	for _, item := range result.Items {
+		var logType LogType
+		err := dynamodbattribute.UnmarshalMap(item, &logType)
+		if err != nil {
+			log.Printf("❌ Error unmarshaling log type: %v", err)
+			continue
+		}
+
+		log.Printf("✅ Unmarshaled log type: %s (ID: %s)", logType.Name, logType.ID)
+
+		// Query fields for this log type
+		fieldsResult, err := h.DynamoDB.Query(&dynamodb.QueryInput{
+			TableName:              aws.String("puzzle-hub-log-fields"),
+			IndexName:              aws.String("log-type-id-index"),
+			KeyConditionExpression: aws.String("log_type_id = :log_type_id"),
+			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+				":log_type_id": {
+					S: aws.String(logType.ID),
+				},
+			},
+		})
+		if err != nil {
+			log.Printf("❌ Error querying log fields for %s: %v", logType.Name, err)
+			// Continue without fields
+		} else {
+			var fields []LogField
+			for _, fieldItem := range fieldsResult.Items {
+				var field LogField
+				err := dynamodbattribute.UnmarshalMap(fieldItem, &field)
+				if err != nil {
+					log.Printf("❌ Error unmarshaling log field: %v", err)
+					continue
+				}
+				fields = append(fields, field)
+			}
+			logType.Fields = fields
+			log.Printf("📝 Added %d fields to log type: %s", len(fields), logType.Name)
+		}
+
+		logTypes = append(logTypes, logType)
+	}
+
+	log.Printf("✅ Returning %d log types to client", len(logTypes))
+	c.JSON(http.StatusOK, gin.H{"log_types": logTypes})
+}
+
+func (h *PuzzleHub) createLogType(c *gin.Context) {
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
+		return
+	}
+	userObj := user.(*User)
+
+	var request CreateLogTypeRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		log.Printf("Error binding JSON in createLogType: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	log.Printf("Creating log type: %+v", request)
+
+	// Generate unique ID for log type
+	logTypeID := fmt.Sprintf("lt_%d", time.Now().UnixNano())
+
+	// Create log type
+	logType := LogType{
+		ID:          logTypeID,
+		UserID:      userObj.ID,
+		Name:        request.Name,
+		Description: request.Description,
+		Color:       request.Color,
+		Icon:        request.Icon,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+
+	// Marshal log type to DynamoDB format
+	logTypeItem, err := dynamodbattribute.MarshalMap(logType)
+	if err != nil {
+		log.Printf("Error marshaling log type: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create log type"})
+		return
+	}
+
+	// Put log type in DynamoDB
+	_, err = h.DynamoDB.PutItem(&dynamodb.PutItemInput{
+		TableName: aws.String("puzzle-hub-log-types"),
+		Item:      logTypeItem,
+	})
+	if err != nil {
+		log.Printf("❌ Error putting log type: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create log type"})
+		return
+	}
+
+	log.Printf("✅ Successfully created log type: %s (ID: %s)", logType.Name, logType.ID)
+
+	// Create log fields
+	for i, field := range request.Fields {
+		fieldID := fmt.Sprintf("lf_%d_%d", time.Now().UnixNano(), i)
+		logField := LogField{
+			ID:           fieldID,
+			LogTypeID:    logTypeID,
+			FieldName:    field.FieldName,
+			FieldType:    FieldType(field.FieldType),
+			Required:     field.Required,
+			Options:      field.Options,
+			DefaultValue: field.DefaultValue,
+			DisplayOrder: i,
+		}
+
+		fieldItem, err := dynamodbattribute.MarshalMap(logField)
+		if err != nil {
+			log.Printf("Error marshaling log field: %v", err)
+			continue
+		}
+
+		_, err = h.DynamoDB.PutItem(&dynamodb.PutItemInput{
+			TableName: aws.String("puzzle-hub-log-fields"),
+			Item:      fieldItem,
+		})
+		if err != nil {
+			log.Printf("Error putting log field: %v", err)
+			// Continue with other fields
+		}
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"message":     "Log type created successfully",
+		"log_type_id": logTypeID,
+	})
+}
+
+func (h *PuzzleHub) updateLogType(c *gin.Context) {
+	// Implementation for updating log types
+	c.JSON(http.StatusNotImplemented, gin.H{"error": "Not implemented yet"})
+}
+
+func (h *PuzzleHub) deleteLogType(c *gin.Context) {
+	// Implementation for deleting log types
+	c.JSON(http.StatusNotImplemented, gin.H{"error": "Not implemented yet"})
+}
+
+// AI-powered field suggestion using Perplexity
+func (h *PuzzleHub) suggestLogFields(c *gin.Context) {
+	_, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
+		return
+	}
+
+	var request SuggestFieldsRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		log.Printf("Error binding JSON in suggestLogFields: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	log.Printf("Suggesting fields for log type: %s", request.LogTypeName)
+
+	// Build prompt for Perplexity
+	prompt := fmt.Sprintf(`You are an expert in data logging and tracking systems. A user wants to create a custom log type called "%s".
+
+Description: %s
+
+Please suggest 5-8 relevant fields that would be useful for tracking this type of activity. For each field, provide:
+1. Field name (concise, no spaces, use underscores)
+2. Field type (text, number, textarea, select, checkbox)
+3. Whether it should be required (true/false)
+4. Default value (if applicable)
+5. Options (if it's a select field, provide comma-separated options)
+6. Brief description of what this field tracks
+
+Focus on fields that would provide meaningful insights and analytics. For trading logs, include fields like entry_price, exit_price, quantity, profit_loss, strategy, etc. For gym logs, include fields like exercise, weight, sets, reps, duration, etc.
+
+Respond ONLY with a JSON object in this exact format:
+{
+  "suggested_fields": [
+    {
+      "field_name": "example_field",
+      "field_type": "number",
+      "required": true,
+      "default_value": "",
+      "options": "",
+      "description": "Brief description"
+    }
+  ],
+  "explanation": "Brief explanation of why these fields are useful for this log type"
+}`, request.LogTypeName, request.Description)
+
+	// Call Perplexity API
+	response, err := h.generateWithPerplexity(prompt)
+	if err != nil {
+		log.Printf("Error calling Perplexity API: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate field suggestions"})
+		return
+	}
+
+	// Parse the JSON response
+	var suggestionsResponse SuggestFieldsResponse
+	if err := json.Unmarshal([]byte(response), &suggestionsResponse); err != nil {
+		log.Printf("Error parsing Perplexity response: %v", err)
+		// Fallback to basic suggestions
+		suggestionsResponse = h.getFallbackFieldSuggestions(request.LogTypeName)
+	}
+
+	c.JSON(http.StatusOK, suggestionsResponse)
+}
+
+// Fallback field suggestions if AI fails
+func (h *PuzzleHub) getFallbackFieldSuggestions(logTypeName string) SuggestFieldsResponse {
+	logTypeLower := strings.ToLower(logTypeName)
+
+	var fields []SuggestedField
+	var explanation string
+
+	if strings.Contains(logTypeLower, "gym") || strings.Contains(logTypeLower, "workout") || strings.Contains(logTypeLower, "exercise") {
+		fields = []SuggestedField{
+			{FieldName: "exercise", FieldType: "text", Required: true, Description: "Name of the exercise"},
+			{FieldName: "weight", FieldType: "number", Required: false, DefaultValue: "0", Description: "Weight used in kg/lbs"},
+			{FieldName: "sets", FieldType: "number", Required: true, Description: "Number of sets performed"},
+			{FieldName: "reps", FieldType: "number", Required: true, Description: "Repetitions per set"},
+			{FieldName: "duration", FieldType: "number", Required: false, Description: "Duration in minutes"},
+			{FieldName: "notes", FieldType: "textarea", Required: false, Description: "Additional notes"},
+		}
+		explanation = "These fields help track workout progress, strength gains, and exercise performance over time."
+	} else if strings.Contains(logTypeLower, "trading") || strings.Contains(logTypeLower, "trade") {
+		fields = []SuggestedField{
+			{FieldName: "symbol", FieldType: "text", Required: true, Description: "Trading symbol (e.g., AAPL, BTC)"},
+			{FieldName: "entry_price", FieldType: "number", Required: true, Description: "Entry price"},
+			{FieldName: "exit_price", FieldType: "number", Required: false, Description: "Exit price"},
+			{FieldName: "quantity", FieldType: "number", Required: true, Description: "Number of shares/units"},
+			{FieldName: "trade_type", FieldType: "select", Required: true, Options: "Buy,Sell,Short,Cover", Description: "Type of trade"},
+			{FieldName: "profit_loss", FieldType: "number", Required: false, Description: "Profit or loss amount"},
+			{FieldName: "strategy", FieldType: "text", Required: false, Description: "Trading strategy used"},
+		}
+		explanation = "These fields enable comprehensive trade tracking, P&L analysis, and strategy performance evaluation."
+	} else {
+		fields = []SuggestedField{
+			{FieldName: "title", FieldType: "text", Required: true, Description: "Title or name"},
+			{FieldName: "amount", FieldType: "number", Required: false, Description: "Numeric value"},
+			{FieldName: "category", FieldType: "select", Required: false, Options: "Category 1,Category 2,Category 3", Description: "Category classification"},
+			{FieldName: "completed", FieldType: "checkbox", Required: false, Description: "Completion status"},
+			{FieldName: "notes", FieldType: "textarea", Required: false, Description: "Additional notes"},
+		}
+		explanation = "These are general-purpose fields that can be customized for various logging needs."
+	}
+
+	return SuggestFieldsResponse{
+		SuggestedFields: fields,
+		Explanation:     explanation,
+	}
+}
+
+// Log Entries handlers
+func (h *PuzzleHub) getLogEntries(c *gin.Context) {
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
+		return
+	}
+	userObj := user.(*User)
+
+	// Get log_type_id from query parameter
+	logTypeId := c.Query("log_type_id")
+
+	var result *dynamodb.QueryOutput
+	var err error
+
+	if logTypeId != "" {
+		// Query log entries for specific log type
+		result, err = h.DynamoDB.Query(&dynamodb.QueryInput{
+			TableName:              aws.String("puzzle-hub-log-entries"),
+			IndexName:              aws.String("user-date-index"),
+			KeyConditionExpression: aws.String("user_id = :user_id"),
+			FilterExpression:       aws.String("log_type_id = :log_type_id"),
+			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+				":user_id": {
+					S: aws.String(userObj.ID),
+				},
+				":log_type_id": {
+					S: aws.String(logTypeId),
+				},
+			},
+		})
+	} else {
+		// Query all log entries for the user
+		result, err = h.DynamoDB.Query(&dynamodb.QueryInput{
+			TableName:              aws.String("puzzle-hub-log-entries"),
+			IndexName:              aws.String("user-date-index"),
+			KeyConditionExpression: aws.String("user_id = :user_id"),
+			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+				":user_id": {
+					S: aws.String(userObj.ID),
+				},
+			},
+		})
+	}
+
+	if err != nil {
+		log.Printf("Error querying log entries: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch log entries"})
+		return
+	}
+
+	var logEntries []LogEntry
+	for _, item := range result.Items {
+		var entry LogEntry
+		err := dynamodbattribute.UnmarshalMap(item, &entry)
+		if err != nil {
+			log.Printf("Error unmarshaling log entry: %v", err)
+			continue
+		}
+		logEntries = append(logEntries, entry)
+	}
+
+	// If a specific log type was requested, also return the log type info
+	var logType *LogType
+	if logTypeId != "" {
+		logTypeResult, err := h.DynamoDB.GetItem(&dynamodb.GetItemInput{
+			TableName: aws.String("puzzle-hub-log-types"),
+			Key: map[string]*dynamodb.AttributeValue{
+				"id": {
+					S: aws.String(logTypeId),
+				},
+			},
+		})
+		if err == nil && logTypeResult.Item != nil {
+			var lt LogType
+			if dynamodbattribute.UnmarshalMap(logTypeResult.Item, &lt) == nil && lt.UserID == userObj.ID {
+				logType = &lt
+			}
+		}
+	}
+
+	response := gin.H{"log_entries": logEntries}
+	if logType != nil {
+		response["log_type"] = logType
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+func (h *PuzzleHub) createLogEntry(c *gin.Context) {
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
+		return
+	}
+	userObj := user.(*User)
+
+	var request CreateLogEntryRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Validate entry date format
+	_, err := time.Parse("2006-01-02", request.EntryDate)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid date format. Use YYYY-MM-DD"})
+		return
+	}
+
+	// Generate unique ID for log entry
+	entryID := fmt.Sprintf("le_%d", time.Now().UnixNano())
+
+	// Create log entry
+	logEntry := LogEntry{
+		ID:        entryID,
+		LogTypeID: request.LogTypeID,
+		UserID:    userObj.ID,
+		EntryDate: request.EntryDate,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		Values:    request.Values,
+	}
+
+	// Marshal log entry to DynamoDB format
+	entryItem, err := dynamodbattribute.MarshalMap(logEntry)
+	if err != nil {
+		log.Printf("Error marshaling log entry: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create log entry"})
+		return
+	}
+
+	// Put log entry in DynamoDB
+	_, err = h.DynamoDB.PutItem(&dynamodb.PutItemInput{
+		TableName: aws.String("puzzle-hub-log-entries"),
+		Item:      entryItem,
+	})
+	if err != nil {
+		log.Printf("Error putting log entry: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create log entry"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"message":  "Log entry created successfully",
+		"entry_id": entryID,
+	})
+}
+
+func (h *PuzzleHub) updateLogEntry(c *gin.Context) {
+	// Implementation for updating log entries
+	c.JSON(http.StatusNotImplemented, gin.H{"error": "Not implemented yet"})
+}
+
+func (h *PuzzleHub) deleteLogEntry(c *gin.Context) {
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
+		return
+	}
+	userObj := user.(*User)
+
+	entryId := c.Param("id")
+	if entryId == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Entry ID is required"})
+		return
+	}
+
+	// First, get the entry to verify ownership
+	getResult, err := h.DynamoDB.GetItem(&dynamodb.GetItemInput{
+		TableName: aws.String("puzzle-hub-log-entries"),
+		Key: map[string]*dynamodb.AttributeValue{
+			"id": {
+				S: aws.String(entryId),
+			},
+		},
+	})
+	if err != nil {
+		log.Printf("Error getting log entry for deletion: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify entry"})
+		return
+	}
+
+	if getResult.Item == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Log entry not found"})
+		return
+	}
+
+	// Unmarshal to verify ownership
+	var entry LogEntry
+	err = dynamodbattribute.UnmarshalMap(getResult.Item, &entry)
+	if err != nil {
+		log.Printf("Error unmarshaling log entry: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse entry"})
+		return
+	}
+
+	// Verify ownership
+	if entry.UserID != userObj.ID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+
+	// Delete the entry
+	_, err = h.DynamoDB.DeleteItem(&dynamodb.DeleteItemInput{
+		TableName: aws.String("puzzle-hub-log-entries"),
+		Key: map[string]*dynamodb.AttributeValue{
+			"id": {
+				S: aws.String(entryId),
+			},
+		},
+	})
+	if err != nil {
+		log.Printf("Error deleting log entry: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete entry"})
+		return
+	}
+
+	log.Printf("Log entry %s deleted successfully by user %s", entryId, userObj.ID)
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Log entry deleted successfully",
+	})
+}
+
+// Analytics handlers
+func (h *PuzzleHub) getLogAnalytics(c *gin.Context) {
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
+		return
+	}
+	userObj := user.(*User)
+
+	// Get all log types for the user
+	logTypesResult, err := h.DynamoDB.Query(&dynamodb.QueryInput{
+		TableName:              aws.String("puzzle-hub-log-types"),
+		IndexName:              aws.String("user-id-index"),
+		KeyConditionExpression: aws.String("user_id = :user_id"),
+		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+			":user_id": {
+				S: aws.String(userObj.ID),
+			},
+		},
+	})
+	if err != nil {
+		log.Printf("Error querying log types for analytics: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch analytics"})
+		return
+	}
+
+	var analytics []LogAnalytics
+	totalEntries := 0
+
+	for _, item := range logTypesResult.Items {
+		var logType LogType
+		err := dynamodbattribute.UnmarshalMap(item, &logType)
+		if err != nil {
+			log.Printf("Error unmarshaling log type: %v", err)
+			continue
+		}
+
+		// Get entries for this log type
+		entriesResult, err := h.DynamoDB.Query(&dynamodb.QueryInput{
+			TableName:              aws.String("puzzle-hub-log-entries"),
+			IndexName:              aws.String("user-date-index"),
+			KeyConditionExpression: aws.String("user_id = :user_id"),
+			FilterExpression:       aws.String("log_type_id = :log_type_id"),
+			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+				":user_id": {
+					S: aws.String(userObj.ID),
+				},
+				":log_type_id": {
+					S: aws.String(logType.ID),
+				},
+			},
+		})
+		if err != nil {
+			log.Printf("Error querying entries for log type %s: %v", logType.ID, err)
+			continue
+		}
+
+		entryCount := len(entriesResult.Items)
+		totalEntries += entryCount
+
+		// Calculate monthly data and other analytics
+		monthlyData := h.calculateMonthlyData(entriesResult.Items)
+		thisMonth, thisWeek := h.calculateRecentActivity(entriesResult.Items)
+
+		analytics = append(analytics, LogAnalytics{
+			LogTypeID:     logType.ID,
+			LogTypeName:   logType.Name,
+			TotalEntries:  entryCount,
+			ThisMonth:     thisMonth,
+			ThisWeek:      thisWeek,
+			DailyActivity: make(map[string]interface{}),
+			MonthlyTrend:  monthlyData,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"analytics":       analytics,
+		"total_entries":   totalEntries,
+		"total_log_types": len(logTypesResult.Items),
+	})
+}
+
+func (h *PuzzleHub) getLogTypeAnalytics(c *gin.Context) {
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
+		return
+	}
+	userObj := user.(*User)
+
+	logTypeId := c.Param("logTypeId")
+	if logTypeId == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Log type ID is required"})
+		return
+	}
+
+	// Get the log type
+	logTypeResult, err := h.DynamoDB.GetItem(&dynamodb.GetItemInput{
+		TableName: aws.String("puzzle-hub-log-types"),
+		Key: map[string]*dynamodb.AttributeValue{
+			"id": {
+				S: aws.String(logTypeId),
+			},
+		},
+	})
+	if err != nil {
+		log.Printf("Error getting log type: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch log type"})
+		return
+	}
+
+	if logTypeResult.Item == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Log type not found"})
+		return
+	}
+
+	var logType LogType
+	err = dynamodbattribute.UnmarshalMap(logTypeResult.Item, &logType)
+	if err != nil {
+		log.Printf("Error unmarshaling log type: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse log type"})
+		return
+	}
+
+	// Verify ownership
+	if logType.UserID != userObj.ID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+
+	// Get all entries for this log type
+	entriesResult, err := h.DynamoDB.Query(&dynamodb.QueryInput{
+		TableName:              aws.String("puzzle-hub-log-entries"),
+		IndexName:              aws.String("user-date-index"),
+		KeyConditionExpression: aws.String("user_id = :user_id"),
+		FilterExpression:       aws.String("log_type_id = :log_type_id"),
+		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+			":user_id": {
+				S: aws.String(userObj.ID),
+			},
+			":log_type_id": {
+				S: aws.String(logTypeId),
+			},
+		},
+	})
+	if err != nil {
+		log.Printf("Error querying entries: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch entries"})
+		return
+	}
+
+	// Calculate detailed analytics
+	monthlyData := h.calculateMonthlyData(entriesResult.Items)
+	thisMonth, thisWeek := h.calculateRecentActivity(entriesResult.Items)
+	dailyActivity := h.calculateDailyActivity(entriesResult.Items)
+	fieldAnalytics := h.calculateFieldAnalytics(entriesResult.Items, logType.Fields)
+
+	analytics := LogAnalytics{
+		LogTypeID:     logType.ID,
+		LogTypeName:   logType.Name,
+		TotalEntries:  len(entriesResult.Items),
+		ThisMonth:     thisMonth,
+		ThisWeek:      thisWeek,
+		DailyActivity: dailyActivity,
+		MonthlyTrend:  monthlyData,
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"analytics":       analytics,
+		"field_analytics": fieldAnalytics,
+		"log_type":        logType,
+	})
+}
+
+// Helper functions for analytics calculations
+func (h *PuzzleHub) calculateMonthlyData(items []map[string]*dynamodb.AttributeValue) []MonthlyData {
+	monthCounts := make(map[string]int)
+
+	for _, item := range items {
+		var entry LogEntry
+		err := dynamodbattribute.UnmarshalMap(item, &entry)
+		if err != nil {
+			continue
+		}
+
+		// Parse date and get month
+		if date, err := time.Parse("2006-01-02", entry.EntryDate); err == nil {
+			monthKey := date.Format("2006-01")
+			monthCounts[monthKey]++
+		}
+	}
+
+	var monthlyData []MonthlyData
+	for month, count := range monthCounts {
+		monthlyData = append(monthlyData, MonthlyData{
+			Month:   month,
+			Count:   count,
+			Summary: nil, // Can be enhanced with field-specific summaries
+		})
+	}
+
+	return monthlyData
+}
+
+func (h *PuzzleHub) calculateRecentActivity(items []map[string]*dynamodb.AttributeValue) (int, int) {
+	now := time.Now()
+	thisMonth := 0
+	thisWeek := 0
+
+	for _, item := range items {
+		var entry LogEntry
+		err := dynamodbattribute.UnmarshalMap(item, &entry)
+		if err != nil {
+			continue
+		}
+
+		if date, err := time.Parse("2006-01-02", entry.EntryDate); err == nil {
+			// This month
+			if date.Year() == now.Year() && date.Month() == now.Month() {
+				thisMonth++
+			}
+
+			// This week (last 7 days)
+			if now.Sub(date).Hours() <= 7*24 {
+				thisWeek++
+			}
+		}
+	}
+
+	return thisMonth, thisWeek
+}
+
+func (h *PuzzleHub) calculateDailyActivity(items []map[string]*dynamodb.AttributeValue) map[string]interface{} {
+	dailyActivity := make(map[string]interface{})
+
+	for _, item := range items {
+		var entry LogEntry
+		err := dynamodbattribute.UnmarshalMap(item, &entry)
+		if err != nil {
+			continue
+		}
+
+		if _, exists := dailyActivity[entry.EntryDate]; !exists {
+			dailyActivity[entry.EntryDate] = map[string]interface{}{
+				"count":   0,
+				"entries": []map[string]interface{}{},
+			}
+		}
+
+		dayData := dailyActivity[entry.EntryDate].(map[string]interface{})
+		dayData["count"] = dayData["count"].(int) + 1
+
+		entryData := map[string]interface{}{
+			"id":     entry.ID,
+			"values": entry.Values,
+		}
+		dayData["entries"] = append(dayData["entries"].([]map[string]interface{}), entryData)
+
+		dailyActivity[entry.EntryDate] = dayData
+	}
+
+	return dailyActivity
+}
+
+func (h *PuzzleHub) calculateFieldAnalytics(items []map[string]*dynamodb.AttributeValue, fields []LogField) map[string]interface{} {
+	fieldAnalytics := make(map[string]interface{})
+
+	for _, field := range fields {
+		fieldStats := map[string]interface{}{
+			"field_name":     field.FieldName,
+			"field_type":     field.FieldType,
+			"total_entries":  0,
+			"filled_entries": 0,
+		}
+
+		values := []interface{}{}
+		numericValues := []float64{}
+
+		for _, item := range items {
+			var entry LogEntry
+			err := dynamodbattribute.UnmarshalMap(item, &entry)
+			if err != nil {
+				continue
+			}
+
+			fieldStats["total_entries"] = fieldStats["total_entries"].(int) + 1
+
+			if value, exists := entry.Values[field.FieldName]; exists && value != nil {
+				fieldStats["filled_entries"] = fieldStats["filled_entries"].(int) + 1
+				values = append(values, value)
+
+				// For numeric fields, calculate statistics
+				if field.FieldType == FieldTypeNumber {
+					if numVal, ok := value.(float64); ok {
+						numericValues = append(numericValues, numVal)
+					}
+				}
+			}
+		}
+
+		// Calculate numeric statistics
+		if len(numericValues) > 0 {
+			sum := 0.0
+			min := numericValues[0]
+			max := numericValues[0]
+
+			for _, val := range numericValues {
+				sum += val
+				if val < min {
+					min = val
+				}
+				if val > max {
+					max = val
+				}
+			}
+
+			fieldStats["sum"] = sum
+			fieldStats["average"] = sum / float64(len(numericValues))
+			fieldStats["min"] = min
+			fieldStats["max"] = max
+		}
+
+		fieldStats["sample_values"] = values
+		fieldAnalytics[field.FieldName] = fieldStats
+	}
+
+	return fieldAnalytics
 }
 
 func main() {

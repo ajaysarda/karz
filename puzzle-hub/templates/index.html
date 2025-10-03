@@ -71,6 +71,11 @@
                 </button>
             </li>
             <li class="nav-item" role="presentation">
+                <button class="nav-link" id="logs-tab" data-bs-toggle="tab" data-bs-target="#logs" type="button" role="tab">
+                    <i class="fas fa-chart-line"></i> Custom Logs
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
                 <button class="nav-link" id="profile-tab" data-bs-toggle="tab" data-bs-target="#profile" type="button" role="tab">
                     <i class="fas fa-user"></i> Profile
                 </button>
@@ -759,6 +764,218 @@
                 </div>
             </div>
 
+            <!-- Custom Logs Tab -->
+            <div class="tab-pane fade" id="logs" role="tabpanel">
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card shadow">
+                            <div class="card-header bg-info text-white">
+                                <h3 class="mb-0">
+                                    <i class="fas fa-chart-line me-2"></i>
+                                    Custom Log Tracker
+                                    <span class="badge bg-danger ms-2 fw-bold">BETA</span>
+                                </h3>
+                                <p class="mb-0 mt-2">Create custom logs to track your activities, habits, and progress</p>
+                            </div>
+                            <div class="card-body">
+                                <!-- Log Management Navigation -->
+                                <ul class="nav nav-pills mb-4" id="logsSubTabs" role="tablist">
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link active" id="my-logs-tab" data-bs-toggle="pill" data-bs-target="#my-logs" type="button" role="tab">
+                                            <i class="fas fa-list me-1"></i> My Logs
+                                        </button>
+                                    </li>
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link" id="create-log-tab" data-bs-toggle="pill" data-bs-target="#create-log" type="button" role="tab">
+                                            <i class="fas fa-plus me-1"></i> Create Log Type
+                                        </button>
+                                    </li>
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link" id="add-entry-tab" data-bs-toggle="pill" data-bs-target="#add-entry" type="button" role="tab">
+                                            <i class="fas fa-edit me-1"></i> Add Entry
+                                        </button>
+                                    </li>
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link" id="analytics-tab" data-bs-toggle="pill" data-bs-target="#analytics" type="button" role="tab">
+                                            <i class="fas fa-chart-bar me-1"></i> Analytics
+                                        </button>
+                                    </li>
+                                </ul>
+
+                                <div class="tab-content" id="logsSubTabsContent">
+                                    <!-- My Logs Tab -->
+                                    <div class="tab-pane fade show active" id="my-logs" role="tabpanel">
+                                        <div class="d-flex justify-content-between align-items-center mb-3">
+                                            <h4>My Log Types</h4>
+                                            <button class="btn btn-primary" onclick="switchToCreateLog()">
+                                                <i class="fas fa-plus me-1"></i> Create New Log
+                                            </button>
+                                        </div>
+                                        
+                                        <div id="logTypesList" class="row">
+                                            <!-- Log types will be loaded here -->
+                                            <div class="col-12 text-center py-5">
+                                                <div class="spinner-border text-primary" role="status">
+                                                    <span class="visually-hidden">Loading...</span>
+                                                </div>
+                                                <p class="mt-2">Loading your logs...</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Create Log Type Tab -->
+                                    <div class="tab-pane fade" id="create-log" role="tabpanel">
+                                        <h4>Create New Log Type</h4>
+                                        <form id="createLogForm">
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <div class="mb-3">
+                                                        <label for="logName" class="form-label">Log Name *</label>
+                                                        <input type="text" class="form-control" id="logName" required 
+                                                               placeholder="e.g., Gym Workout, Trading Log">
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <div class="mb-3">
+                                                        <label for="logIcon" class="form-label">Icon</label>
+                                                        <select class="form-select" id="logIcon">
+                                                            <option value="fas fa-dumbbell">🏋️ Gym</option>
+                                                            <option value="fas fa-chart-line">📈 Trading</option>
+                                                            <option value="fas fa-book">📚 Reading</option>
+                                                            <option value="fas fa-utensils">🍽️ Food</option>
+                                                            <option value="fas fa-dollar-sign">💰 Money</option>
+                                                            <option value="fas fa-heart">❤️ Health</option>
+                                                            <option value="fas fa-clock">⏰ Time</option>
+                                                            <option value="fas fa-list">📋 General</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            
+                                            <div class="row">
+                                                <div class="col-md-8">
+                                                    <div class="mb-3">
+                                                        <label for="logDescription" class="form-label">Description</label>
+                                                        <textarea class="form-control" id="logDescription" rows="2" 
+                                                                  placeholder="Brief description of what you'll track"></textarea>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div class="mb-3">
+                                                        <label for="logColor" class="form-label">Color</label>
+                                                        <input type="color" class="form-control form-control-color" id="logColor" value="#007bff">
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <h5>Custom Fields</h5>
+                                            <div class="mb-3">
+                                                <button type="button" class="btn btn-outline-success me-2" onclick="suggestFields()">
+                                                    <i class="fas fa-magic me-1"></i> AI Suggest Fields
+                                                </button>
+                                                <button type="button" class="btn btn-outline-primary" onclick="addCustomField()">
+                                                    <i class="fas fa-plus me-1"></i> Add Field Manually
+                                                </button>
+                                            </div>
+                                            
+                                            <div id="customFields">
+                                                <!-- Custom fields will be added here -->
+                                            </div>
+
+                                            <div class="d-flex gap-2">
+                                                <button type="submit" class="btn btn-success">
+                                                    <i class="fas fa-save me-1"></i> Create Log Type
+                                                </button>
+                                                <button type="button" class="btn btn-secondary" onclick="resetCreateLogForm()">
+                                                    <i class="fas fa-undo me-1"></i> Reset
+                                                </button>
+                                            </div>
+                                        </form>
+                                    </div>
+
+                                    <!-- Add Entry Tab -->
+                                    <div class="tab-pane fade" id="add-entry" role="tabpanel">
+                                        <h4>Add Log Entry</h4>
+                                        <form id="addEntryForm">
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <div class="mb-3">
+                                                        <label for="entryLogType" class="form-label">Log Type *</label>
+                                                        <select class="form-select" id="entryLogType" required onchange="handleLogTypeSelection()">
+                                                            <option value="">Select a log type...</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <div class="mb-3">
+                                                        <label for="entryDate" class="form-label">Date *</label>
+                                                        <input type="date" class="form-control" id="entryDate" required>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="row" id="entryCustomFields">
+                                                <!-- Dynamic fields will be loaded here based on selected log type -->
+                                            </div>
+
+                                            <button type="submit" class="btn btn-primary">
+                                                <i class="fas fa-save me-1"></i> Save Entry
+                                            </button>
+                                        </form>
+                                    </div>
+
+                                    <!-- Analytics Tab -->
+                                    <div class="tab-pane fade" id="analytics" role="tabpanel">
+                                        <h4>Analytics Dashboard</h4>
+
+                                        <div class="row mt-4">
+                                            <div class="col-12">
+                                                <div class="card">
+                                                    <div class="card-header d-flex justify-content-between align-items-center">
+                                                        <h5 class="mb-0">Log Type Calendar</h5>
+                                                        <div class="d-flex align-items-center">
+                                                            <label class="form-label me-2 mb-0">Select Log Type:</label>
+                                                            <select class="form-select form-select-sm" id="calendarLogTypeSelector" style="width: auto;" onchange="handleCalendarLogTypeChange()">
+                                                                <option value="">Choose a log type...</option>
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                    <div class="card-body">
+                                                        <div id="activityCalendar">
+                                                            <div class="text-center py-4">
+                                                                <i class="fas fa-calendar-alt fa-3x text-muted mb-3"></i>
+                                                                <p class="text-muted">Select a log type above to view its detailed calendar</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Detailed Calendar View Modal -->
+                                        <div class="modal fade" id="detailedCalendarModal" tabindex="-1">
+                                            <div class="modal-dialog modal-xl">
+                                                <div class="modal-content">
+                                                    <div class="modal-header">
+                                                        <h5 class="modal-title" id="detailedCalendarTitle">Detailed Calendar View</h5>
+                                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                    </div>
+                                                    <div class="modal-body">
+                                                        <div id="detailedCalendarContent">
+                                                            <!-- Detailed calendar content will be rendered here -->
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Profile Tab -->
             <div class="tab-pane fade" id="profile" role="tabpanel">
                 <div class="row">
@@ -812,8 +1029,7 @@
                     </p>
                 </div>
                 <div class="col-md-6 text-md-end">
-                    <a href="/terms" class="text-muted me-3">Terms of Service</a>
-                    <a href="/privacy" class="text-muted">Privacy Policy</a>
+                    <a href="/terms" class="text-muted">Terms of Service</a>
                 </div>
             </div>
             <div class="row mt-2">

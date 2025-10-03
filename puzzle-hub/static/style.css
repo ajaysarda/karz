@@ -1022,3 +1022,383 @@ body {
     color: var(--secondary-color) !important;
     text-decoration: underline !important;
 }
+
+/* ============================================================================
+   ANALYTICS & CALENDAR STYLES
+   ============================================================================ */
+
+/* Activity Calendar Styles */
+.activity-calendar {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.calendar-legend {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: #666;
+}
+
+.legend-scale {
+    display: flex;
+    gap: 2px;
+    margin: 0 10px;
+}
+
+.legend-day {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+}
+
+.calendar-weeks {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.calendar-week {
+    display: flex;
+    gap: 2px;
+}
+
+.calendar-day {
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.calendar-day:hover {
+    transform: scale(1.2);
+    border: 1px solid #333;
+}
+
+/* Activity levels */
+.calendar-day.level-0, .legend-day.level-0 {
+    background-color: #ebedf0;
+}
+
+.calendar-day.level-1, .legend-day.level-1 {
+    background-color: #c6e48b;
+}
+
+.calendar-day.level-2, .legend-day.level-2 {
+    background-color: #7bc96f;
+}
+
+.calendar-day.level-3, .legend-day.level-3 {
+    background-color: #239a3b;
+}
+
+.calendar-day.level-4, .legend-day.level-4 {
+    background-color: #196127;
+}
+
+/* Analytics Cards */
+.analytics-card {
+    transition: all 0.3s ease;
+}
+
+.analytics-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+}
+
+/* Log Type Breakdown Cards */
+.log-type-card {
+    border-left: 4px solid var(--primary-color);
+    transition: all 0.3s ease;
+}
+
+.log-type-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+}
+
+/* Responsive Calendar */
+@media (max-width: 768px) {
+    .calendar-day {
+        width: 10px;
+        height: 10px;
+    }
+    
+    .legend-day {
+        width: 8px;
+        height: 8px;
+    }
+    
+    .calendar-legend {
+        font-size: 11px;
+    }
+}
+
+@media (max-width: 576px) {
+    .calendar-day {
+        width: 8px;
+        height: 8px;
+    }
+    
+    .legend-day {
+        width: 6px;
+        height: 6px;
+    }
+    
+    .calendar-legend {
+        font-size: 10px;
+    }
+    
+    .calendar-weeks {
+        gap: 1px;
+    }
+    
+    .calendar-week {
+        gap: 1px;
+    }
+}
+
+/* ============================================================================
+   DETAILED CALENDAR STYLES
+   ============================================================================ */
+
+/* Mini Calendar Grid */
+.mini-calendar {
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.calendar-grid {
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    overflow: hidden;
+    background: white;
+}
+
+.calendar-weekdays {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    background: #f8f9fa;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.weekday {
+    padding: 6px 4px;
+    text-align: center;
+    font-weight: 600;
+    font-size: 12px;
+    color: #6c757d;
+    border-right: 1px solid #e9ecef;
+}
+
+.weekday:last-child {
+    border-right: none;
+}
+
+.calendar-days {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 0;
+}
+
+.mini-calendar .calendar-day {
+    min-height: 45px;
+    padding: 3px;
+    border-right: 1px solid #e9ecef;
+    border-bottom: 1px solid #e9ecef;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    background: white;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.mini-calendar .calendar-day:last-child {
+    border-right: none;
+}
+
+.mini-calendar .calendar-day:hover {
+    background: #f8f9fa;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    border-color: #007bff;
+}
+
+.mini-calendar .calendar-day.other-month {
+    background: #f8f9fa;
+    color: #adb5bd;
+}
+
+.mini-calendar .calendar-day.today {
+    background: linear-gradient(135deg, #e3f2fd, #bbdefb);
+    border: 2px solid #2196f3;
+    font-weight: bold;
+    box-shadow: 0 0 10px rgba(33, 150, 243, 0.3);
+}
+
+.day-number {
+    font-size: 14px;
+    font-weight: 500;
+    align-self: flex-start;
+}
+
+.day-metric {
+    font-size: 11px;
+    font-weight: bold;
+    align-self: center;
+    margin-top: auto;
+    padding: 2px 4px;
+    border-radius: 4px;
+    text-align: center;
+    min-height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+/* New trading calendar specific styles */
+.day-pl {
+    font-size: 13px;
+    font-weight: bold;
+    text-align: center;
+    margin-top: 3px;
+    color: inherit;
+}
+
+.day-trades {
+    font-size: 10px;
+    text-align: center;
+    margin-top: 2px;
+    color: rgba(0, 0, 0, 0.7);
+    font-weight: 500;
+}
+
+/* Trading-specific styles - Updated for new layout */
+.mini-calendar .calendar-day.profit-day {
+    background-color: #4CAF50 !important;
+    color: white !important;
+}
+
+.mini-calendar .calendar-day.profit-day .day-trades {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.mini-calendar .calendar-day.loss-day {
+    background-color: #f44336 !important;
+    color: white !important;
+}
+
+.mini-calendar .calendar-day.loss-day .day-trades {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.mini-calendar .calendar-day.no-activity {
+    background-color: #f8f9fa;
+    color: #6c757d;
+}
+
+.mini-calendar .calendar-day.no-activity .day-trades {
+    color: rgba(108, 117, 125, 0.7);
+}
+
+/* Legacy styles for backward compatibility */
+.mini-calendar .calendar-day.profit-day .day-metric {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.mini-calendar .calendar-day.loss-day .day-metric {
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+/* Activity/Gym-specific styles */
+.mini-calendar .calendar-day.checkin-day .day-metric {
+    background: linear-gradient(135deg, #28a745, #20c997);
+    color: white;
+    border: 1px solid #1e7e34;
+    font-weight: bold;
+    box-shadow: 0 2px 4px rgba(40, 167, 69, 0.3);
+}
+
+/* General activity styles */
+.mini-calendar .calendar-day.activity-day .day-metric {
+    background: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeaa7;
+}
+
+.mini-calendar .calendar-day.has-activity {
+    background: #f8f9fa;
+}
+
+/* Calendar month header */
+.calendar-month-header h5, .calendar-month-header h6 {
+    color: #495057;
+    font-weight: 600;
+    margin-bottom: 0;
+}
+
+.calendar-month-header .btn {
+    border-radius: 50%;
+    width: 35px;
+    height: 35px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.calendar-month-header .btn:hover {
+    transform: scale(1.1);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
+/* Detailed calendar container */
+.detailed-calendar {
+    animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Calendar summary cards */
+.detailed-calendar .card {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.detailed-calendar .card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+/* Responsive detailed calendar */
+@media (max-width: 768px) {
+    .mini-calendar .calendar-day {
+        min-height: 45px;
+        padding: 2px;
+    }
+    
+    .mini-calendar .day-number {
+        font-size: 10px;
+    }
+    
+    .mini-calendar .day-metric {
+        font-size: 8px;
+        min-height: 12px;
+        padding: 1px 2px;
+    }
+    
+    .mini-calendar .weekday {
+        padding: 6px 2px;
+        font-size: 10px;
+    }
+}

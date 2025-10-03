@@ -51,6 +51,9 @@ document.addEventListener('DOMContentLoaded', function() {
     loadProfile();
     updateStats();
     
+    // Initialize Custom Logs functionality
+    initializeCustomLogs();
+    
     // Profile form handler
     document.getElementById('profileForm').addEventListener('submit', function(e) {
         e.preventDefault();
@@ -1976,19 +1979,1962 @@ function showProgress() {
 }
 
 // Add authentication to API requests
-function makeAuthenticatedRequest(url, options = {}) {
-    if (!authToken) {
-        throw new Error('No authentication token available');
+async function makeAuthenticatedRequest(url, options = {}) {
+    // Get token from localStorage or global variable
+    const token = authToken || localStorage.getItem('authToken');
+    
+    console.log('Making authenticated request to:', url);
+    console.log('Token available:', !!token);
+    
+    if (!token) {
+        console.error('No auth token available');
+        showLoginScreen();
+        throw new Error('Authentication required. Please login first.');
     }
     
     const headers = {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${authToken}`,
+        'Authorization': `Bearer ${token}`,
         ...options.headers
     };
     
-    return fetch(url, {
+    const response = await fetch(url, {
         ...options,
         headers
     });
+    
+    // If we get 401, the token might be expired
+    if (response.status === 401) {
+        console.error('Authentication failed - token may be expired');
+        localStorage.removeItem('authToken');
+        authToken = null;
+        showLoginScreen();
+        throw new Error('Authentication expired. Please login again.');
+    }
+    
+    return response;
+}
+
+// ============================================================================
+// CUSTOM LOGS FUNCTIONALITY
+// ============================================================================
+
+// Load user's log types
+async function loadLogTypes() {
+    try {
+        const response = await makeAuthenticatedRequest('/api/logs/types');
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        displayLogTypes(data.log_types || []);
+        
+    } catch (error) {
+        console.error('Error loading log types:', error);
+        displayLogTypesError('Failed to load your logs. Please try again.');
+    }
+}
+
+// Display log types in the UI
+function displayLogTypes(logTypes) {
+    const container = document.getElementById('logTypesList');
+    
+    if (logTypes.length === 0) {
+        container.innerHTML = `
+            <div class="col-12 text-center py-5">
+                <i class="fas fa-plus-circle fa-3x text-muted mb-3"></i>
+                <h5>No Custom Logs Yet</h5>
+                <p class="text-muted">Create your first custom log to start tracking your activities!</p>
+                <button class="btn btn-primary" onclick="switchToCreateLogTab()">
+                    <i class="fas fa-plus me-2"></i>Create Your First Log
+                </button>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '';
+    logTypes.forEach(logType => {
+        html += `
+            <div class="col-md-6 col-lg-4 mb-3">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center mb-2">
+                            <i class="${logType.icon || 'fas fa-list'} fa-2x me-3" style="color: ${logType.color || '#007bff'}"></i>
+                            <div>
+                                <h6 class="card-title mb-0">${logType.name}</h6>
+                                <small class="text-muted">${logType.fields ? logType.fields.length : 0} fields</small>
+                            </div>
+                        </div>
+                        <p class="card-text small">${logType.description || 'No description'}</p>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-sm btn-primary" onclick="addLogEntry('${logType.id}')">
+                                <i class="fas fa-plus me-1"></i>Add Entry
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary" onclick="viewLogEntries('${logType.id}')">
+                                <i class="fas fa-eye me-1"></i>View
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+// Display error when loading log types fails
+function displayLogTypesError(message) {
+    const container = document.getElementById('logTypesList');
+    container.innerHTML = `
+        <div class="col-12 text-center py-5">
+            <i class="fas fa-exclamation-triangle fa-3x text-warning mb-3"></i>
+            <h5>Unable to Load Logs</h5>
+            <p class="text-muted">${message}</p>
+            <button class="btn btn-primary" onclick="loadLogTypes()">
+                <i class="fas fa-refresh me-2"></i>Try Again
+            </button>
+        </div>
+    `;
+}
+
+// Switch to create log tab
+function switchToCreateLogTab() {
+    const createLogTab = document.getElementById('create-log-tab');
+    if (createLogTab) {
+        createLogTab.click();
+    }
+}
+
+// Add log entry - switch to Add Entry tab and pre-select log type
+function addLogEntry(logTypeId) {
+    // Switch to Add Entry tab
+    const addEntryTab = document.getElementById('add-entry-tab');
+    if (addEntryTab) {
+        addEntryTab.click();
+    }
+    
+    // Pre-select the log type
+    setTimeout(() => {
+        const logTypeSelect = document.getElementById('entryLogType');
+        if (logTypeSelect) {
+            logTypeSelect.value = logTypeId;
+            handleLogTypeSelection();
+        }
+        
+        // Set today's date as default
+        const dateInput = document.getElementById('entryDate');
+        if (dateInput && !dateInput.value) {
+            dateInput.value = new Date().toISOString().split('T')[0];
+        }
+    }, 100);
+}
+
+// View log entries - load and display entries for a specific log type
+async function viewLogEntries(logTypeId) {
+    try {
+        console.log('Loading entries for log type ID:', logTypeId);
+        showFeedback('Loading entries...', 'info');
+        const response = await makeAuthenticatedRequest(`/api/logs/entries?log_type_id=${logTypeId}`);
+        
+        console.log('Response status:', response.status);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        const entries = data.log_entries || [];
+        
+        console.log('Loaded entries for log type:', logTypeId, entries);
+        console.log('Log type info:', data.log_type);
+        
+        if (entries.length === 0) {
+            showFeedback('No entries found for this log type', 'info');
+            return;
+        }
+        
+        // Show entries in a modal
+        showEntriesModal(entries, data.log_type || { name: 'Log Entries' });
+        
+    } catch (error) {
+        console.error('Error loading log entries:', error);
+        showFeedback('Failed to load log entries', 'error');
+    }
+}
+
+function showEntriesModal(entries, logType) {
+    const modalHtml = `
+        <div class="modal fade" id="entriesModal" tabindex="-1">
+            <div class="modal-dialog modal-xl">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            <i class="${logType.icon || 'fas fa-list'} me-2"></i>
+                            ${logType.name} - Entries (${entries.length})
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Values</th>
+                                        <th>Created</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${entries.map(entry => `
+                                        <tr id="entry-row-${entry.id}">
+                                            <td>
+                                                <strong>${entry.entry_date}</strong>
+                                            </td>
+                                            <td>
+                                                ${formatEntryValues(entry.values)}
+                                            </td>
+                                            <td>
+                                                <small class="text-muted">
+                                                    ${new Date(entry.created_at).toLocaleDateString()}
+                                                </small>
+                                            </td>
+                                            <td>
+                                                <button class="btn btn-sm btn-outline-danger" onclick="deleteLogEntry('${entry.id}')" title="Delete Entry">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Remove existing modal if any
+    const existingModal = document.getElementById('entriesModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Add modal to body
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('entriesModal'));
+    modal.show();
+    
+    // Clean up when modal is hidden
+    document.getElementById('entriesModal').addEventListener('hidden.bs.modal', function() {
+        this.remove();
+    });
+}
+
+function formatEntryValues(values) {
+    if (!values || Object.keys(values).length === 0) {
+        return '<em class="text-muted">No values</em>';
+    }
+    
+    let html = '<div class="row g-2">';
+    for (const [key, value] of Object.entries(values)) {
+        html += `
+            <div class="col-md-6">
+                <small class="text-muted d-block">${key}:</small>
+                <strong>${value}</strong>
+            </div>
+        `;
+    }
+    html += '</div>';
+    
+    return html;
+}
+
+// Initialize Custom Logs when tab is shown
+function initializeCustomLogs() {
+    // Load log types when the Custom Logs tab is first shown
+    const logsTab = document.getElementById('logs-tab');
+    if (logsTab) {
+        logsTab.addEventListener('shown.bs.tab', function() {
+            loadLogTypes();
+            loadLogTypesForEntryForm();
+        });
+    }
+    
+    // Add event listener for analytics tab
+    const analyticsTab = document.getElementById('analytics-tab');
+    if (analyticsTab) {
+        analyticsTab.addEventListener('shown.bs.tab', function() {
+            loadAnalytics();
+        });
+    }
+    
+    // Initialize create log form handler
+    const createLogForm = document.getElementById('createLogForm');
+    if (createLogForm) {
+        createLogForm.addEventListener('submit', handleCreateLogType);
+    }
+    
+    // Initialize add entry form handler
+    const addEntryForm = document.getElementById('addEntryForm');
+    if (addEntryForm) {
+        addEntryForm.addEventListener('submit', handleAddLogEntry);
+    }
+}
+
+// Handle create log type form submission
+async function handleCreateLogType(e) {
+    e.preventDefault();
+    
+    const name = document.getElementById('logName').value.trim();
+    const description = document.getElementById('logDescription').value.trim();
+    const icon = document.getElementById('logIcon').value;
+    const color = document.getElementById('logColor').value;
+    
+    if (!name) {
+        showFeedback('Please enter a log name', 'error');
+        return;
+    }
+    
+    // Collect custom fields
+    const fields = [];
+    const fieldElements = document.querySelectorAll('.custom-field-row');
+    
+    fieldElements.forEach((fieldRow, index) => {
+        const fieldName = fieldRow.querySelector('.field-name').value.trim();
+        const fieldType = fieldRow.querySelector('.field-type').value;
+        const required = fieldRow.querySelector('.field-required').checked;
+        const defaultValue = fieldRow.querySelector('.field-default').value.trim();
+        
+        if (fieldName) {
+            fields.push({
+                field_name: fieldName,
+                field_type: fieldType,
+                required: required,
+                default_value: defaultValue,
+                options: fieldType === 'select' ? fieldRow.querySelector('.field-options')?.value || '' : ''
+            });
+        }
+    });
+    
+    const logTypeData = {
+        name: name,
+        description: description,
+        icon: icon,
+        color: color,
+        fields: fields
+    };
+    
+    try {
+        showFeedback('Creating log type...', 'info');
+        
+        const response = await makeAuthenticatedRequest('/api/logs/types', {
+            method: 'POST',
+            body: JSON.stringify(logTypeData)
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to create log type');
+        }
+        
+        const result = await response.json();
+        showFeedback('Log type created successfully!', 'success');
+        
+        // Reset form and reload log types
+        resetCreateLogForm();
+        loadLogTypes();
+        loadLogTypesForEntryForm();
+        
+        // Switch to My Logs tab to show the new log type
+        const myLogsTab = document.getElementById('my-logs-tab');
+        if (myLogsTab) {
+            myLogsTab.click();
+        }
+        
+    } catch (error) {
+        console.error('Error creating log type:', error);
+        showFeedback(error.message, 'error');
+    }
+}
+
+// Add a custom field to the create log form
+function addCustomField() {
+    const container = document.getElementById('customFields');
+    const fieldIndex = container.children.length;
+    
+    const fieldHtml = `
+        <div class="custom-field-row border rounded p-3 mb-3">
+            <div class="row">
+                <div class="col-md-4">
+                    <label class="form-label">Field Name *</label>
+                    <input type="text" class="form-control field-name" placeholder="e.g., Weight, Duration" required>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Field Type</label>
+                    <select class="form-control field-type" onchange="toggleFieldOptions(this)">
+                        <option value="text">Text</option>
+                        <option value="number">Number</option>
+                        <option value="textarea">Long Text</option>
+                        <option value="select">Dropdown</option>
+                        <option value="checkbox">Checkbox</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Default Value</label>
+                    <input type="text" class="form-control field-default" placeholder="Optional">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Required</label>
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input field-required">
+                        <label class="form-check-label">Required</label>
+                    </div>
+                </div>
+            </div>
+            <div class="field-options-container mt-2" style="display: none;">
+                <label class="form-label">Options (one per line)</label>
+                <textarea class="form-control field-options" rows="3" placeholder="Option 1&#10;Option 2&#10;Option 3"></textarea>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-danger mt-2" onclick="removeCustomField(this)">
+                <i class="fas fa-trash me-1"></i>Remove Field
+            </button>
+        </div>
+    `;
+    
+    container.insertAdjacentHTML('beforeend', fieldHtml);
+}
+
+// Remove a custom field
+function removeCustomField(button) {
+    button.closest('.custom-field-row').remove();
+}
+
+// Toggle field options visibility for select fields
+function toggleFieldOptions(selectElement) {
+    const optionsContainer = selectElement.closest('.custom-field-row').querySelector('.field-options-container');
+    if (selectElement.value === 'select') {
+        optionsContainer.style.display = 'block';
+    } else {
+        optionsContainer.style.display = 'none';
+    }
+}
+
+// Reset the create log form
+function resetCreateLogForm() {
+    document.getElementById('createLogForm').reset();
+    document.getElementById('customFields').innerHTML = '';
+    document.getElementById('logColor').value = '#007bff';
+}
+
+// AI-powered field suggestions
+async function suggestFields() {
+    const logName = document.getElementById('logName').value.trim();
+    const description = document.getElementById('logDescription').value.trim();
+    
+    if (!logName) {
+        showFeedback('Please enter a log name first', 'error');
+        return;
+    }
+    
+    try {
+        console.log('Requesting AI field suggestions for:', logName);
+        showFeedback('AI is analyzing your log type and suggesting fields...', 'info');
+        
+        const requestBody = {
+            log_type_name: logName,
+            description: description
+        };
+        console.log('Request body:', requestBody);
+        
+        const response = await makeAuthenticatedRequest('/api/logs/types/suggest-fields', {
+            method: 'POST',
+            body: JSON.stringify(requestBody)
+        });
+        
+        console.log('Suggest fields response status:', response.status);
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Suggest fields error response:', errorText);
+            throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+        }
+        
+        const data = await response.json();
+        console.log('AI suggestions received:', data);
+        
+        // Clear existing fields
+        document.getElementById('customFields').innerHTML = '';
+        
+        // Add suggested fields
+        data.suggested_fields.forEach((field, index) => {
+            addSuggestedField(field, index);
+        });
+        
+        showFeedback(`✨ AI suggested ${data.suggested_fields.length} fields! ${data.explanation}`, 'success');
+        
+    } catch (error) {
+        console.error('Error getting field suggestions:', error);
+        showFeedback('Failed to get AI suggestions: ' + error.message, 'error');
+    }
+}
+
+// Add a suggested field to the form
+function addSuggestedField(field, index) {
+    const container = document.getElementById('customFields');
+    
+    const fieldHtml = `
+        <div class="custom-field-row border rounded p-3 mb-3 bg-light">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+                <h6 class="mb-0 text-success">
+                    <i class="fas fa-magic me-1"></i>AI Suggested Field
+                </h6>
+                <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeCustomField(this)">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+            <div class="row">
+                <div class="col-md-4">
+                    <label class="form-label">Field Name *</label>
+                    <input type="text" class="form-control field-name" value="${field.field_name}" required>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Field Type</label>
+                    <select class="form-control field-type" onchange="toggleFieldOptions(this)">
+                        <option value="text" ${field.field_type === 'text' ? 'selected' : ''}>Text</option>
+                        <option value="number" ${field.field_type === 'number' ? 'selected' : ''}>Number</option>
+                        <option value="textarea" ${field.field_type === 'textarea' ? 'selected' : ''}>Long Text</option>
+                        <option value="select" ${field.field_type === 'select' ? 'selected' : ''}>Dropdown</option>
+                        <option value="checkbox" ${field.field_type === 'checkbox' ? 'selected' : ''}>Checkbox</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Default Value</label>
+                    <input type="text" class="form-control field-default" value="${field.default_value || ''}" placeholder="Optional">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Required</label>
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input field-required" ${field.required ? 'checked' : ''}>
+                        <label class="form-check-label">Required</label>
+                    </div>
+                </div>
+            </div>
+            <div class="field-options-container mt-2" style="display: ${field.field_type === 'select' ? 'block' : 'none'};">
+                <label class="form-label">Options (one per line)</label>
+                <textarea class="form-control field-options" rows="3" placeholder="Option 1&#10;Option 2&#10;Option 3">${field.options ? field.options.replace(/,/g, '\n') : ''}</textarea>
+            </div>
+            <div class="mt-2">
+                <small class="text-muted">
+                    <i class="fas fa-info-circle me-1"></i>
+                    ${field.description}
+                </small>
+            </div>
+        </div>
+    `;
+    
+    container.insertAdjacentHTML('beforeend', fieldHtml);
+}
+
+// Load log types for the entry form dropdown
+async function loadLogTypesForEntryForm() {
+    try {
+        const response = await makeAuthenticatedRequest('/api/logs/types');
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        const logTypes = data.log_types || [];
+        
+        const select = document.getElementById('entryLogType');
+        if (select) {
+            select.innerHTML = '<option value="">Select a log type...</option>';
+            
+            logTypes.forEach(logType => {
+                const option = document.createElement('option');
+                option.value = logType.id;
+                option.textContent = logType.name;
+                option.dataset.fields = JSON.stringify(logType.fields || []);
+                select.appendChild(option);
+            });
+        }
+        
+    } catch (error) {
+        console.error('Error loading log types for entry form:', error);
+    }
+}
+
+// Handle log type selection in entry form
+function handleLogTypeSelection() {
+    const select = document.getElementById('entryLogType');
+    const fieldsContainer = document.getElementById('entryCustomFields');
+    
+    if (!select.value) {
+        fieldsContainer.innerHTML = '';
+        return;
+    }
+    
+    const selectedOption = select.options[select.selectedIndex];
+    const fields = JSON.parse(selectedOption.dataset.fields || '[]');
+    
+    if (fields.length === 0) {
+        fieldsContainer.innerHTML = '<div class="alert alert-info"><i class="fas fa-info-circle me-2"></i>No custom fields for this log type.</div>';
+        return;
+    }
+    
+    // Generate enhanced fields with better UX
+    let fieldsHtml = '<div class="row">';
+    fields.forEach((field, index) => {
+        fieldsHtml += generateEnhancedFieldInput(field, index);
+    });
+    fieldsHtml += '</div>';
+    
+    // Add quick actions
+    fieldsHtml += `
+        <div class="mt-3 p-3 bg-light rounded">
+            <div class="row">
+                <div class="col-md-6">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="clearAllFields()">
+                        <i class="fas fa-eraser me-1"></i> Clear All
+                    </button>
+                    <button type="button" class="btn btn-outline-info btn-sm ms-2" onclick="fillSampleData()">
+                        <i class="fas fa-magic me-1"></i> Sample Data
+                    </button>
+                </div>
+                <div class="col-md-6 text-end">
+                    <small class="text-muted">
+                        <i class="fas fa-save me-1"></i> Auto-saves as you type
+                    </small>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    fieldsContainer.innerHTML = fieldsHtml;
+    
+    // Initialize auto-save and validation
+    initializeFieldEnhancements();
+}
+
+// Generate HTML for a field input based on field type
+function generateFieldInput(field) {
+    const required = field.required ? 'required' : '';
+    const requiredLabel = field.required ? ' *' : '';
+    
+    switch (field.field_type) {
+        case 'text':
+            return `
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">${field.field_name}${requiredLabel}</label>
+                    <input type="text" class="form-control" name="field_${field.field_name}" 
+                           value="${field.default_value || ''}" ${required}>
+                </div>
+            `;
+        case 'number':
+            return `
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">${field.field_name}${requiredLabel}</label>
+                    <input type="number" class="form-control" name="field_${field.field_name}" 
+                           value="${field.default_value || ''}" ${required}>
+                </div>
+            `;
+        case 'textarea':
+            return `
+                <div class="col-12 mb-3">
+                    <label class="form-label">${field.field_name}${requiredLabel}</label>
+                    <textarea class="form-control" name="field_${field.field_name}" rows="3" ${required}>${field.default_value || ''}</textarea>
+                </div>
+            `;
+        case 'select':
+            const options = field.options.split('\n').filter(opt => opt.trim());
+            let optionsHtml = '<option value="">Choose...</option>';
+            options.forEach(option => {
+                const selected = option.trim() === field.default_value ? 'selected' : '';
+                optionsHtml += `<option value="${option.trim()}" ${selected}>${option.trim()}</option>`;
+            });
+            return `
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">${field.field_name}${requiredLabel}</label>
+                    <select class="form-control" name="field_${field.field_name}" ${required}>
+                        ${optionsHtml}
+                    </select>
+                </div>
+            `;
+        case 'checkbox':
+            const checked = field.default_value === 'true' ? 'checked' : '';
+            return `
+                <div class="col-md-6 mb-3">
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input" name="field_${field.field_name}" ${checked}>
+                        <label class="form-check-label">${field.field_name}${requiredLabel}</label>
+                    </div>
+                </div>
+            `;
+        default:
+            return '';
+    }
+}
+
+// Handle add log entry form submission
+async function handleAddLogEntry(e) {
+    e.preventDefault();
+    
+    console.log('Starting handleAddLogEntry...');
+    console.log('Auth token available:', !!(authToken || localStorage.getItem('authToken')));
+    
+    const logTypeId = document.getElementById('entryLogType').value;
+    const entryDate = document.getElementById('entryDate').value;
+    
+    console.log('Log Type ID:', logTypeId);
+    console.log('Entry Date:', entryDate);
+    
+    if (!logTypeId) {
+        showFeedback('Please select a log type', 'error');
+        return;
+    }
+    
+    if (!entryDate) {
+        showFeedback('Please select a date', 'error');
+        return;
+    }
+    
+    // Collect field values
+    const values = {};
+    const fieldInputs = document.querySelectorAll('#entryCustomFields input, #entryCustomFields select, #entryCustomFields textarea');
+    
+    fieldInputs.forEach(input => {
+        const fieldName = input.name.replace('field_', '');
+        if (input.type === 'checkbox') {
+            values[fieldName] = input.checked;
+        } else {
+            values[fieldName] = input.value;
+        }
+    });
+    
+    // Auto-calculate profit_loss if not provided but we have entry_price, exit_price, and quantity
+    if (!values.profit_loss || values.profit_loss === '' || values.profit_loss === 'null') {
+        const entryPrice = parseFloat(values.entry_price) || 0;
+        const exitPrice = parseFloat(values.exit_price) || 0;
+        const quantity = parseFloat(values.quantity) || 0;
+        
+        if (entryPrice > 0 && exitPrice > 0 && quantity > 0) {
+            const calculatedPL = (exitPrice - entryPrice) * quantity;
+            values.profit_loss = calculatedPL.toString();
+            console.log(`Auto-calculated profit_loss: (${exitPrice} - ${entryPrice}) * ${quantity} = ${calculatedPL}`);
+        }
+    }
+    
+    const entryData = {
+        log_type_id: logTypeId,
+        entry_date: entryDate,
+        values: values
+    };
+    
+    console.log('Entry data to send:', entryData);
+    
+    try {
+        showFeedback('Adding log entry...', 'info');
+        
+        const response = await makeAuthenticatedRequest('/api/logs/entries', {
+            method: 'POST',
+            body: JSON.stringify(entryData)
+        });
+        
+        console.log('Add entry response status:', response.status);
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to add log entry');
+        }
+        
+        const result = await response.json();
+        showFeedback('Log entry added successfully!', 'success');
+        
+        // Reset form
+        document.getElementById('addEntryForm').reset();
+        document.getElementById('entryCustomFields').innerHTML = '';
+        
+        // Clear auto-saved data
+        clearAutoSavedData();
+        
+        // Refresh analytics if the analytics tab is active
+        const analyticsTab = document.getElementById('analytics-tab');
+        if (analyticsTab && analyticsTab.classList.contains('active')) {
+            console.log('Refreshing analytics after adding log entry...');
+            setTimeout(() => {
+                loadAnalytics();
+            }, 500); // Small delay to ensure backend is updated
+        }
+        
+    } catch (error) {
+        console.error('Error adding log entry:', error);
+        showFeedback(error.message, 'error');
+    }
+}
+
+// ANALYTICS FUNCTIONALITY
+async function loadAnalytics() {
+    try {
+        console.log('Loading analytics...');
+        showFeedback('Loading analytics...', 'info');
+        
+        const response = await makeAuthenticatedRequest('/api/logs/analytics');
+        console.log('Analytics response status:', response.status);
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Analytics error response:', errorText);
+            throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+        }
+        
+        const data = await response.json();
+        console.log('Analytics data received:', data);
+        displayAnalytics(data);
+        
+    } catch (error) {
+        console.error('Error loading analytics:', error);
+        showFeedback('Failed to load analytics: ' + error.message, 'error');
+        
+        // Show empty state
+        displayEmptyAnalytics();
+    }
+}
+
+function displayEmptyAnalytics() {
+    // Update summary cards with zeros
+    document.getElementById('totalLogs').textContent = '0';
+    document.getElementById('thisMonthEntries').textContent = '0';
+    document.getElementById('thisWeekEntries').textContent = '0';
+    document.getElementById('currentStreak').textContent = '0';
+    
+    // Show empty calendar
+    const calendarContainer = document.getElementById('activityCalendar');
+    if (calendarContainer) {
+        const emptyCalendarHtml = generateCalendarHtml({});
+        calendarContainer.innerHTML = emptyCalendarHtml + 
+            '<div class="text-center mt-3"><p class="text-muted">No activity data yet. Start by creating log types and adding entries!</p></div>';
+    }
+    
+    // Clear log type breakdown
+    const existingBreakdown = document.getElementById('logTypeBreakdown');
+    if (existingBreakdown) {
+        existingBreakdown.remove();
+    }
+}
+
+function displayAnalytics(data) {
+    // Store analytics data globally for calendar filtering
+    window.currentAnalyticsData = data;
+    
+    // Populate log type selector
+    populateCalendarLogTypeSelector(data.analytics);
+    
+    // Render log type breakdown
+    renderLogTypeBreakdown(data.analytics);
+    
+    showFeedback('Analytics loaded successfully!', 'success');
+}
+
+function populateCalendarLogTypeSelector(analytics) {
+    const selector = document.getElementById('calendarLogTypeSelector');
+    if (!selector) return;
+    
+    // Clear existing options except the default
+    selector.innerHTML = '<option value="">Choose a log type...</option>';
+    
+    // Add option for each log type
+    analytics.forEach(logAnalytics => {
+        const option = document.createElement('option');
+        option.value = logAnalytics.log_type_id;
+        option.textContent = logAnalytics.log_type_name;
+        selector.appendChild(option);
+    });
+}
+
+function handleCalendarLogTypeChange() {
+    const selector = document.getElementById('calendarLogTypeSelector');
+    const selectedLogTypeId = selector.value;
+    const calendarContainer = document.getElementById('activityCalendar');
+    
+    if (!window.currentAnalyticsData || !calendarContainer) return;
+    
+    if (!selectedLogTypeId) {
+        // Show default message when no log type is selected
+        calendarContainer.innerHTML = `
+            <div class="text-center py-4">
+                <i class="fas fa-calendar-alt fa-3x text-muted mb-3"></i>
+                <p class="text-muted">Select a log type above to view its detailed calendar</p>
+            </div>
+        `;
+        return;
+    }
+    
+    // Show detailed calendar for specific log type
+    const selectedLogType = window.currentAnalyticsData.analytics.find(
+        analytics => analytics.log_type_id === selectedLogTypeId
+    );
+    
+    if (selectedLogType) {
+        renderDetailedLogTypeCalendar(selectedLogType);
+    }
+}
+
+function calculateStreak(analytics) {
+    // Collect all entry dates
+    const allDates = new Set();
+    
+    analytics.forEach(logAnalytics => {
+        Object.keys(logAnalytics.daily_activity || {}).forEach(date => {
+            allDates.add(date);
+        });
+    });
+    
+    // Sort dates
+    const sortedDates = Array.from(allDates).sort().reverse();
+    
+    // Calculate consecutive days from today
+    let streak = 0;
+    const today = new Date().toISOString().split('T')[0];
+    
+    for (let i = 0; i < sortedDates.length; i++) {
+        const expectedDate = new Date();
+        expectedDate.setDate(expectedDate.getDate() - i);
+        const expectedDateStr = expectedDate.toISOString().split('T')[0];
+        
+        if (sortedDates[i] === expectedDateStr) {
+            streak++;
+        } else {
+            break;
+        }
+    }
+    
+    return streak;
+}
+
+
+function renderLogTypeBreakdown(analytics) {
+    const container = document.querySelector('#analytics .row:last-child');
+    if (!container) return;
+    
+    // Clear existing breakdown
+    const existingBreakdown = document.getElementById('logTypeBreakdown');
+    if (existingBreakdown) {
+        existingBreakdown.remove();
+    }
+    
+    // Create breakdown section
+    const breakdownHtml = `
+        <div class="col-12 mt-4" id="logTypeBreakdown">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Log Type Breakdown</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        ${analytics.map(logAnalytics => `
+                            <div class="col-md-4 mb-3">
+                                <div class="card border-start border-primary border-3">
+                                    <div class="card-body">
+                                        <h6 class="card-title">${logAnalytics.log_type_name}</h6>
+                                        <div class="d-flex justify-content-between">
+                                            <small class="text-muted">Total Entries:</small>
+                                            <strong>${logAnalytics.total_entries}</strong>
+                                        </div>
+                                        <div class="d-flex justify-content-between">
+                                            <small class="text-muted">This Month:</small>
+                                            <strong>${logAnalytics.this_month || 0}</strong>
+                                        </div>
+                                        <div class="d-flex justify-content-between">
+                                            <small class="text-muted">This Week:</small>
+                                            <strong>${logAnalytics.this_week || 0}</strong>
+                                        </div>
+                                        <button class="btn btn-sm btn-outline-primary mt-2" onclick="viewDetailedAnalytics('${logAnalytics.log_type_id}')">
+                                            <i class="fas fa-chart-line me-1"></i> View Details
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    container.insertAdjacentHTML('beforeend', breakdownHtml);
+}
+
+async function viewDetailedAnalytics(logTypeId) {
+    try {
+        showFeedback('Loading detailed analytics...', 'info');
+        
+        const response = await makeAuthenticatedRequest(`/api/logs/analytics/${logTypeId}`);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        showDetailedAnalyticsModal(data);
+        
+    } catch (error) {
+        console.error('Error loading detailed analytics:', error);
+        showFeedback('Failed to load detailed analytics', 'error');
+    }
+}
+
+function showDetailedAnalyticsModal(data) {
+    // Create modal HTML
+    const modalHtml = `
+        <div class="modal fade" id="detailedAnalyticsModal" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">${data.log_type.name} - Detailed Analytics</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row mb-4">
+                            <div class="col-md-3">
+                                <div class="text-center">
+                                    <h4 class="text-primary">${data.analytics.total_entries}</h4>
+                                    <small class="text-muted">Total Entries</small>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="text-center">
+                                    <h4 class="text-success">${data.analytics.this_month}</h4>
+                                    <small class="text-muted">This Month</small>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="text-center">
+                                    <h4 class="text-warning">${data.analytics.this_week}</h4>
+                                    <small class="text-muted">This Week</small>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="text-center">
+                                    <h4 class="text-info">${data.analytics.monthly_trend.length}</h4>
+                                    <small class="text-muted">Active Months</small>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        ${Object.keys(data.field_analytics || {}).length > 0 ? `
+                            <h6>Field Statistics</h6>
+                            <div class="row">
+                                ${Object.entries(data.field_analytics).map(([fieldName, stats]) => `
+                                    <div class="col-md-6 mb-3">
+                                        <div class="card">
+                                            <div class="card-body">
+                                                <h6 class="card-title">${fieldName}</h6>
+                                                <small class="text-muted">${stats.field_type}</small>
+                                                <div class="mt-2">
+                                                    <div class="d-flex justify-content-between">
+                                                        <span>Filled:</span>
+                                                        <span>${stats.filled_entries}/${stats.total_entries}</span>
+                                                    </div>
+                                                    ${stats.average !== undefined ? `
+                                                        <div class="d-flex justify-content-between">
+                                                            <span>Average:</span>
+                                                            <span>${stats.average.toFixed(2)}</span>
+                                                        </div>
+                                                        <div class="d-flex justify-content-between">
+                                                            <span>Range:</span>
+                                                            <span>${stats.min} - ${stats.max}</span>
+                                                        </div>
+                                                    ` : ''}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        ` : ''}
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Remove existing modal
+    const existingModal = document.getElementById('detailedAnalyticsModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Add modal to page
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('detailedAnalyticsModal'));
+    modal.show();
+    
+    // Clean up when modal is hidden
+    document.getElementById('detailedAnalyticsModal').addEventListener('hidden.bs.modal', function() {
+        this.remove();
+    });
+}
+
+// Enhanced field generation and UX functions
+function generateEnhancedFieldInput(field, index) {
+    const required = field.required ? 'required' : '';
+    const requiredLabel = field.required ? ' *' : '';
+    const fieldId = `field_${field.field_name}_${index}`;
+    
+    switch (field.field_type) {
+        case 'text':
+            return `
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">${field.field_name}${requiredLabel}</label>
+                    <input type="text" class="form-control enhanced-field" id="${fieldId}" 
+                           name="field_${field.field_name}" value="${field.default_value || ''}" 
+                           ${required} data-field-type="text" placeholder="Enter ${field.field_name}">
+                    <div class="field-feedback"></div>
+                </div>
+            `;
+        case 'number':
+            return `
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">${field.field_name}${requiredLabel}</label>
+                    <input type="number" class="form-control enhanced-field" id="${fieldId}" 
+                           name="field_${field.field_name}" value="${field.default_value || ''}" 
+                           ${required} data-field-type="number" placeholder="Enter ${field.field_name}" step="any">
+                    <div class="field-feedback"></div>
+                </div>
+            `;
+        case 'textarea':
+            return `
+                <div class="col-12 mb-3">
+                    <label class="form-label">${field.field_name}${requiredLabel}</label>
+                    <textarea class="form-control enhanced-field" id="${fieldId}" 
+                              name="field_${field.field_name}" rows="3" ${required} 
+                              data-field-type="textarea" placeholder="Enter ${field.field_name}">${field.default_value || ''}</textarea>
+                    <div class="field-feedback"></div>
+                </div>
+            `;
+        case 'select':
+            const options = field.options ? field.options.split(',').map(opt => opt.trim()) : [];
+            let optionsHtml = '<option value="">Select an option...</option>';
+            options.forEach(option => {
+                const selected = option === field.default_value ? 'selected' : '';
+                optionsHtml += `<option value="${option}" ${selected}>${option}</option>`;
+            });
+            return `
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">${field.field_name}${requiredLabel}</label>
+                    <select class="form-select enhanced-field" id="${fieldId}" 
+                            name="field_${field.field_name}" ${required} data-field-type="select">
+                        ${optionsHtml}
+                    </select>
+                    <div class="field-feedback"></div>
+                </div>
+            `;
+        case 'checkbox':
+            const checked = field.default_value === 'true' ? 'checked' : '';
+            return `
+                <div class="col-md-6 mb-3">
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input enhanced-field" id="${fieldId}" 
+                               name="field_${field.field_name}" value="true" ${checked} 
+                               data-field-type="checkbox">
+                        <label class="form-check-label" for="${fieldId}">
+                            ${field.field_name}${requiredLabel}
+                        </label>
+                    </div>
+                    <div class="field-feedback"></div>
+                </div>
+            `;
+        default:
+            return `
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">${field.field_name}${requiredLabel}</label>
+                    <input type="text" class="form-control enhanced-field" id="${fieldId}" 
+                           name="field_${field.field_name}" value="${field.default_value || ''}" 
+                           ${required} data-field-type="text" placeholder="Enter ${field.field_name}">
+                    <div class="field-feedback"></div>
+                </div>
+            `;
+    }
+}
+
+function initializeFieldEnhancements() {
+    const enhancedFields = document.querySelectorAll('.enhanced-field');
+    
+    enhancedFields.forEach(field => {
+        field.addEventListener('input', debounce(autoSaveField, 1000));
+        field.addEventListener('blur', validateField);
+        
+        if (field.dataset.fieldType === 'number') {
+            field.addEventListener('input', formatNumberField);
+        }
+    });
+    
+    loadAutoSavedData();
+}
+
+function autoSaveField(event) {
+    const field = event.target;
+    const logTypeId = document.getElementById('entryLogType').value;
+    const entryDate = document.getElementById('entryDate').value;
+    
+    if (!logTypeId || !entryDate) return;
+    
+    const autoSaveKey = `entry_autosave_${logTypeId}_${entryDate}`;
+    let savedData = JSON.parse(localStorage.getItem(autoSaveKey) || '{}');
+    
+    savedData[field.name] = field.type === 'checkbox' ? field.checked : field.value;
+    localStorage.setItem(autoSaveKey, JSON.stringify(savedData));
+    
+    showAutoSaveIndicator(field);
+}
+
+function loadAutoSavedData() {
+    const logTypeId = document.getElementById('entryLogType').value;
+    const entryDate = document.getElementById('entryDate').value;
+    
+    if (!logTypeId || !entryDate) return;
+    
+    const autoSaveKey = `entry_autosave_${logTypeId}_${entryDate}`;
+    const savedData = JSON.parse(localStorage.getItem(autoSaveKey) || '{}');
+    
+    Object.entries(savedData).forEach(([fieldName, value]) => {
+        const field = document.querySelector(`[name="${fieldName}"]`);
+        if (field) {
+            if (field.type === 'checkbox') {
+                field.checked = value;
+            } else {
+                field.value = value;
+            }
+        }
+    });
+}
+
+function clearAutoSavedData() {
+    const logTypeId = document.getElementById('entryLogType').value;
+    const entryDate = document.getElementById('entryDate').value;
+    
+    if (!logTypeId || !entryDate) return;
+    
+    const autoSaveKey = `entry_autosave_${logTypeId}_${entryDate}`;
+    localStorage.removeItem(autoSaveKey);
+}
+
+function showAutoSaveIndicator(field) {
+    const feedback = field.parentElement.querySelector('.field-feedback');
+    if (feedback) {
+        feedback.innerHTML = '<small class="text-success"><i class="fas fa-check me-1"></i>Saved</small>';
+        setTimeout(() => {
+            feedback.innerHTML = '';
+        }, 2000);
+    }
+}
+
+function validateField(event) {
+    const field = event.target;
+    const feedback = field.parentElement.querySelector('.field-feedback');
+    
+    if (!feedback) return;
+    
+    let isValid = true;
+    let message = '';
+    
+    if (field.required && !field.value.trim()) {
+        isValid = false;
+        message = 'This field is required';
+    }
+    
+    if (field.dataset.fieldType === 'number' && field.value) {
+        const numValue = parseFloat(field.value);
+        if (isNaN(numValue)) {
+            isValid = false;
+            message = 'Please enter a valid number';
+        }
+    }
+    
+    if (isValid) {
+        field.classList.remove('is-invalid');
+        field.classList.add('is-valid');
+        feedback.innerHTML = '';
+    } else {
+        field.classList.remove('is-valid');
+        field.classList.add('is-invalid');
+        feedback.innerHTML = `<small class="text-danger"><i class="fas fa-exclamation-triangle me-1"></i>${message}</small>`;
+    }
+}
+
+function formatNumberField(event) {
+    const field = event.target;
+    const value = field.value;
+    const cleanValue = value.replace(/[^0-9.-]/g, '');
+    
+    if (cleanValue !== value) {
+        field.value = cleanValue;
+    }
+}
+
+function clearAllFields() {
+    const enhancedFields = document.querySelectorAll('.enhanced-field');
+    enhancedFields.forEach(field => {
+        if (field.type === 'checkbox') {
+            field.checked = false;
+        } else {
+            field.value = '';
+        }
+        field.classList.remove('is-valid', 'is-invalid');
+        const feedback = field.parentElement.querySelector('.field-feedback');
+        if (feedback) feedback.innerHTML = '';
+    });
+    
+    clearAutoSavedData();
+    showFeedback('All fields cleared', 'info');
+}
+
+function fillSampleData() {
+    const logTypeSelect = document.getElementById('entryLogType');
+    const selectedOption = logTypeSelect.options[logTypeSelect.selectedIndex];
+    const logTypeName = selectedOption.text.toLowerCase();
+    
+    const enhancedFields = document.querySelectorAll('.enhanced-field');
+    
+    enhancedFields.forEach(field => {
+        const fieldName = field.name.replace('field_', '').toLowerCase();
+        let sampleValue = '';
+        
+        if (fieldName.includes('weight') || fieldName.includes('price') || fieldName.includes('amount')) {
+            sampleValue = Math.floor(Math.random() * 100) + 1;
+        } else if (fieldName.includes('sets') || fieldName.includes('reps') || fieldName.includes('quantity')) {
+            sampleValue = Math.floor(Math.random() * 20) + 1;
+        } else if (fieldName.includes('duration') || fieldName.includes('time')) {
+            sampleValue = Math.floor(Math.random() * 60) + 5;
+        } else if (fieldName.includes('symbol') && logTypeName.includes('trading')) {
+            const symbols = ['AAPL', 'GOOGL', 'MSFT', 'TSLA', 'AMZN', 'BTC', 'ETH'];
+            sampleValue = symbols[Math.floor(Math.random() * symbols.length)];
+        } else if (fieldName.includes('exercise') && logTypeName.includes('gym')) {
+            const exercises = ['Bench Press', 'Squats', 'Deadlift', 'Pull-ups', 'Push-ups'];
+            sampleValue = exercises[Math.floor(Math.random() * exercises.length)];
+        } else if (field.dataset.fieldType === 'select') {
+            const options = Array.from(field.options).filter(opt => opt.value);
+            if (options.length > 0) {
+                sampleValue = options[Math.floor(Math.random() * options.length)].value;
+            }
+        } else if (field.dataset.fieldType === 'checkbox') {
+            field.checked = Math.random() > 0.5;
+            return;
+        } else if (field.dataset.fieldType === 'textarea') {
+            sampleValue = 'Sample notes and observations for this entry.';
+        } else {
+            sampleValue = `Sample ${fieldName}`;
+        }
+        
+        if (field.type !== 'checkbox') {
+            field.value = sampleValue;
+        }
+        
+        field.dispatchEvent(new Event('blur'));
+    });
+    
+    showFeedback('Sample data filled in all fields', 'success');
+}
+
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+// Detailed calendar view for specific log types
+async function renderDetailedLogTypeCalendar(logAnalytics) {
+    const calendarContainer = document.getElementById('activityCalendar');
+    
+    if (!calendarContainer) {
+        console.error('Calendar container not found');
+        return;
+    }
+    
+    // Get detailed data for this log type
+    try {
+        const response = await makeAuthenticatedRequest(`/api/logs/analytics/${logAnalytics.log_type_id}`);
+        if (!response.ok) {
+            throw new Error(`Failed to load detailed analytics`);
+        }
+        
+        const detailedData = await response.json();
+        
+        // Determine log type category for specific rendering
+        const logTypeName = logAnalytics.log_type_name.toLowerCase();
+        let calendarType = 'general';
+        
+        if (logTypeName.includes('trading') || logTypeName.includes('trade')) {
+            calendarType = 'trading';
+        } else if (logTypeName.includes('gym') || logTypeName.includes('workout') || logTypeName.includes('exercise') || logTypeName.includes('activity')) {
+            calendarType = 'activity';
+        }
+        
+        // Render calendar based on type
+        const calendarHtml = generateDetailedCalendarHtml(detailedData, calendarType);
+        calendarContainer.innerHTML = calendarHtml;
+        
+    } catch (error) {
+        console.error('Error loading detailed analytics:', error);
+        calendarContainer.innerHTML = '<div class="alert alert-danger">Failed to load detailed calendar view</div>';
+    }
+}
+
+function generateDetailedCalendarHtml(detailedData, calendarType) {
+    const today = new Date();
+    const currentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+    const prevMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    
+    let html = `
+        <div class="detailed-calendar">
+            <div class="calendar-header mb-4">
+                <div class="row align-items-center">
+                    <div class="col-md-8">
+                        <div class="d-flex align-items-center mb-2">
+                            <i class="${detailedData.log_type.icon || 'fas fa-calendar-check'} fa-2x me-3" style="color: ${detailedData.log_type.color || '#28a745'}"></i>
+                            <div>
+                                <h5 class="text-primary mb-0">${detailedData.log_type.name} - Detailed View</h5>
+                                <p class="text-muted mb-0">${getCalendarDescription(calendarType)}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <button class="btn btn-outline-primary btn-sm" onclick="showFullCalendarModal('${detailedData.log_type.id}', '${calendarType}')">
+                            <i class="fas fa-expand me-1"></i> Full View
+                        </button>
+                    </div>
+                </div>
+            </div>
+    `;
+    
+    // Generate summary cards based on calendar type
+    html += generateCalendarSummary(detailedData, calendarType);
+    
+    // Generate mini calendar for current month
+    html += generateMiniCalendar(detailedData, calendarType, currentMonth);
+    
+    html += '</div>';
+    
+    return html;
+}
+
+function getCalendarDescription(calendarType) {
+    switch (calendarType) {
+        case 'trading':
+            return 'Daily profit/loss, monthly totals, and trading performance metrics';
+        case 'activity':
+            return 'Daily check-ins, streaks, and activity consistency tracking';
+        default:
+            return 'Daily activity tracking and progress monitoring';
+    }
+}
+
+function generateCalendarSummary(detailedData, calendarType) {
+    const analytics = detailedData.analytics;
+    const fieldAnalytics = detailedData.field_analytics || {};
+    
+    console.log('Generating calendar summary for:', calendarType);
+    console.log('Analytics data:', analytics);
+    console.log('Field analytics data:', fieldAnalytics);
+    
+    let html = '<div class="row mb-4">';
+    
+    if (calendarType === 'trading') {
+        // Trading-specific metrics
+        const profitLossField = findProfitLossField(fieldAnalytics);
+        const totalPL = profitLossField ? (profitLossField.sum || 0) : 0;
+        const avgPL = profitLossField ? (profitLossField.average || 0) : 0;
+        const winRate = calculateWinRate(fieldAnalytics);
+        
+        console.log('Profit/Loss field found:', profitLossField);
+        console.log('Total P&L:', totalPL, 'Avg P&L:', avgPL, 'Win Rate:', winRate);
+        
+        html += `
+            <div class="col-md-3">
+                <div class="card ${totalPL >= 0 ? 'border-success' : 'border-danger'}">
+                    <div class="card-body text-center">
+                        <h5 class="${totalPL >= 0 ? 'text-success' : 'text-danger'}">$${totalPL.toFixed(2)}</h5>
+                        <small class="text-muted">Total P&L</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <h5 class="text-primary">$${avgPL.toFixed(2)}</h5>
+                        <small class="text-muted">Avg per Trade</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <h5 class="text-info">${winRate.toFixed(1)}%</h5>
+                        <small class="text-muted">Win Rate</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <h5 class="text-warning">${analytics.total_entries}</h5>
+                        <small class="text-muted">Total Trades</small>
+                    </div>
+                </div>
+            </div>
+        `;
+    } else if (calendarType === 'activity') {
+        // Activity/Gym-specific metrics
+        const streak = calculateActivityStreak(analytics.daily_activity);
+        const monthlyCheckIns = analytics.this_month || 0;
+        const consistency = calculateConsistency(analytics.daily_activity);
+        
+        const streakEmoji = streak >= 7 ? '🔥' : streak >= 3 ? '💪' : streak >= 1 ? '✨' : '💤';
+        const consistencyEmoji = consistency >= 80 ? '🏆' : consistency >= 60 ? '🎯' : consistency >= 40 ? '📈' : '🌱';
+        
+        html += `
+            <div class="col-md-3">
+                <div class="card border-success">
+                    <div class="card-body text-center">
+                        <div class="d-flex align-items-center justify-content-center mb-2">
+                            <span class="fs-4 me-2">${streakEmoji}</span>
+                            <h4 class="text-success mb-0">${streak}</h4>
+                        </div>
+                        <small class="text-muted">Current Streak</small>
+                        <div class="mt-1">
+                            <small class="text-success fw-bold">${streak >= 7 ? 'On fire!' : streak >= 3 ? 'Keep it up!' : streak >= 1 ? 'Good start!' : 'Time to begin!'}</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-primary">
+                    <div class="card-body text-center">
+                        <div class="d-flex align-items-center justify-content-center mb-2">
+                            <span class="fs-4 me-2">📅</span>
+                            <h4 class="text-primary mb-0">${monthlyCheckIns}</h4>
+                        </div>
+                        <small class="text-muted">This Month</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-info">
+                    <div class="card-body text-center">
+                        <div class="d-flex align-items-center justify-content-center mb-2">
+                            <span class="fs-4 me-2">${consistencyEmoji}</span>
+                            <h4 class="text-info mb-0">${consistency.toFixed(1)}%</h4>
+                        </div>
+                        <small class="text-muted">Consistency</small>
+                        <div class="mt-1">
+                            <small class="text-info fw-bold">${consistency >= 80 ? 'Amazing!' : consistency >= 60 ? 'Great job!' : consistency >= 40 ? 'Getting better!' : 'Room to grow!'}</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-warning">
+                    <div class="card-body text-center">
+                        <div class="d-flex align-items-center justify-content-center mb-2">
+                            <span class="fs-4 me-2">🎯</span>
+                            <h4 class="text-warning mb-0">${analytics.total_entries}</h4>
+                        </div>
+                        <small class="text-muted">Total Sessions</small>
+                    </div>
+                </div>
+            </div>
+        `;
+    } else {
+        // General metrics
+        html += `
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <h5 class="text-primary">${analytics.total_entries}</h5>
+                        <small class="text-muted">Total Entries</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <h5 class="text-success">${analytics.this_month || 0}</h5>
+                        <small class="text-muted">This Month</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <h5 class="text-info">${analytics.this_week || 0}</h5>
+                        <small class="text-muted">This Week</small>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    html += '</div>';
+    return html;
+}
+
+function generateMiniCalendar(detailedData, calendarType, month) {
+    const dailyActivity = detailedData.analytics.daily_activity || {};
+    const fieldAnalytics = detailedData.field_analytics || {};
+    
+    console.log('🗓️ === GENERATING CALENDAR ===');
+    console.log('Calendar Type:', calendarType);
+    console.log('Month:', month.toLocaleDateString());
+    console.log('Detailed Data:', detailedData);
+    console.log('Daily Activity:', dailyActivity);
+    console.log('Field Analytics:', fieldAnalytics);
+    console.log('============================');
+    
+    const year = month.getFullYear();
+    const monthIndex = month.getMonth();
+    const firstDay = new Date(year, monthIndex, 1);
+    const lastDay = new Date(year, monthIndex + 1, 0);
+    const startDate = new Date(firstDay);
+    startDate.setDate(startDate.getDate() - firstDay.getDay()); // Start from Sunday
+    
+    let html = `
+        <div class="mini-calendar">
+            <div class="calendar-month-header text-center mb-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <button class="btn btn-sm btn-outline-secondary" onclick="navigateMonth(-1)" title="Previous Month">
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
+                    <h5 class="mb-0 text-primary fw-bold">${month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</h5>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="navigateMonth(1)" title="Next Month">
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="calendar-grid">
+                <div class="calendar-weekdays">
+                    <div class="weekday">Sun</div>
+                    <div class="weekday">Mon</div>
+                    <div class="weekday">Tue</div>
+                    <div class="weekday">Wed</div>
+                    <div class="weekday">Thu</div>
+                    <div class="weekday">Fri</div>
+                    <div class="weekday">Sat</div>
+                </div>
+                <div class="calendar-days">
+    `;
+    
+    const currentDate = new Date(startDate);
+    let totalDays = 0;
+    
+    // Generate exactly 6 weeks (42 days) for consistent layout
+    for (let week = 0; week < 6; week++) {
+        for (let day = 0; day < 7; day++) {
+            const dateStr = currentDate.toISOString().split('T')[0];
+            const isCurrentMonth = currentDate.getMonth() === monthIndex;
+            const isToday = dateStr === new Date().toISOString().split('T')[0];
+            const dayActivity = dailyActivity[dateStr];
+            
+            let dayClass = 'calendar-day';
+            let dayContent = `<div class="day-number">${currentDate.getDate()}</div>`;
+            let dayTitle = dateStr;
+            
+            if (!isCurrentMonth) {
+                dayClass += ' other-month';
+            }
+            
+            if (isToday) {
+                dayClass += ' today';
+            }
+            
+            // Always show trading metrics for trading calendar type
+            if (calendarType === 'trading') {
+                if (isCurrentMonth) {
+                    const metrics = dayActivity ? calculateDayMetrics(dayActivity, calendarType, fieldAnalytics) : { 
+                        hasActivity: false, 
+                        totalPL: 0, 
+                        totalTrades: 0,
+                        cssClass: 'no-activity'
+                    };
+                    
+                    console.log(`Day ${dateStr} (current month) metrics:`, metrics);
+                    
+                    // Set background color based on P&L
+                    if (metrics.hasActivity) {
+                        dayClass += metrics.totalPL > 0 ? ' profit-day' : ' loss-day';
+                    } else {
+                        dayClass += ' no-activity';
+                    }
+                    
+                    // Format P&L display
+                    const plDisplay = metrics.totalPL >= 0 ? `$${metrics.totalPL.toFixed(2)}` : `-$${Math.abs(metrics.totalPL).toFixed(2)}`;
+                    const tradeCount = metrics.totalTrades || 0;
+                    const tradeText = tradeCount === 1 ? '1 trade' : `${tradeCount} trades`;
+                    
+                    dayContent = `
+                        <div class="day-number">${currentDate.getDate()}</div>
+                        <div class="day-pl">${plDisplay}</div>
+                        <div class="day-trades">${tradeText}</div>
+                    `;
+                    dayTitle = `${dateStr}: ${plDisplay}, ${tradeText}`;
+                } else {
+                    // Other month days for trading calendar - just show day number
+                    dayContent = `<div class="day-number">${currentDate.getDate()}</div>`;
+                }
+            } else if (dayActivity && isCurrentMonth) {
+                // For non-trading calendar types, use existing logic
+                console.log(`Day ${dateStr} has activity:`, dayActivity);
+                console.log(`Calendar type: ${calendarType}, Field analytics:`, fieldAnalytics);
+                const metrics = calculateDayMetrics(dayActivity, calendarType, fieldAnalytics);
+                console.log(`Calculated metrics for ${dateStr}:`, metrics);
+                dayClass += ` has-activity ${metrics.cssClass}`;
+                dayContent = `<div class="day-number">${currentDate.getDate()}</div><div class="day-metric">${metrics.display}</div>`;
+                dayTitle = `${dateStr}: ${metrics.tooltip}`;
+            }
+            
+            html += `<div class="${dayClass}" title="${dayTitle}">${dayContent}</div>`;
+            currentDate.setDate(currentDate.getDate() + 1);
+            totalDays++;
+        }
+    }
+    
+    html += `
+                </div>
+            </div>
+        </div>
+    `;
+    
+    console.log(`Generated calendar with ${totalDays} days`);
+    return html;
+}
+
+function calculateDayMetrics(dayActivity, calendarType, fieldAnalytics) {
+    const entries = dayActivity.entries || [];
+    const count = dayActivity.count || 0;
+    
+    console.log('Calculating day metrics for:', calendarType, 'with entries:', entries);
+    
+    if (calendarType === 'trading') {
+        // Calculate daily P&L
+        let dailyPL = 0;
+        entries.forEach(entry => {
+            const values = entry.values || {};
+            console.log('Entry values:', values);
+            
+            let entryPL = 0;
+            
+            // First try to get profit_loss directly
+            if (values.profit_loss !== undefined && values.profit_loss !== null && values.profit_loss !== '') {
+                entryPL = parseFloat(values.profit_loss) || 0;
+                console.log(`Using direct profit_loss: ${entryPL}`);
+            } else {
+                // Calculate from entry_price, exit_price, quantity
+                const entryPrice = parseFloat(values.entry_price) || 0;
+                const exitPrice = parseFloat(values.exit_price) || 0;
+                const quantity = parseFloat(values.quantity) || 0;
+                
+                if (entryPrice > 0 && exitPrice > 0 && quantity > 0) {
+                    entryPL = (exitPrice - entryPrice) * quantity;
+                    console.log(`Calculated P&L: (${exitPrice} - ${entryPrice}) * ${quantity} = ${entryPL}`);
+                } else {
+                    console.log('Insufficient data to calculate P&L:', { entryPrice, exitPrice, quantity });
+                }
+            }
+            
+            dailyPL += entryPL;
+        });
+        
+        console.log('Total daily P&L:', dailyPL);
+        
+        return {
+            display: dailyPL >= 0 ? `+$${dailyPL.toFixed(0)}` : `-$${Math.abs(dailyPL).toFixed(0)}`,
+            cssClass: dailyPL >= 0 ? 'profit-day' : 'loss-day',
+            tooltip: `${count} trades, P&L: $${dailyPL.toFixed(2)}`,
+            hasActivity: count > 0,
+            totalPL: dailyPL,
+            totalTrades: count
+        };
+    } else if (calendarType === 'activity') {
+        // Show check-in status with better visual feedback
+        const displayIcon = count > 1 ? `✓${count}` : '✓';
+        return {
+            display: displayIcon,
+            cssClass: 'checkin-day',
+            tooltip: `${count} session${count > 1 ? 's' : ''} - Great job staying active!`,
+            hasActivity: count > 0,
+            totalPL: 0,
+            totalTrades: count
+        };
+    } else {
+        // General activity
+        return {
+            display: count.toString(),
+            cssClass: 'activity-day',
+            tooltip: `${count} entries`,
+            hasActivity: count > 0,
+            totalPL: 0,
+            totalTrades: count
+        };
+    }
+}
+
+// Helper functions for calculations
+function findProfitLossField(fieldAnalytics) {
+    console.log('Looking for profit/loss field in:', fieldAnalytics);
+    
+    const plFields = ['profit_loss', 'profit', 'pnl', 'pl', 'profit_loss_amount', 'profit/loss', 'p&l', 'p_l'];
+    
+    // First try exact matches
+    for (const field of plFields) {
+        if (fieldAnalytics[field] && fieldAnalytics[field].field_type === 'number') {
+            console.log('Found exact match field:', field);
+            return fieldAnalytics[field];
+        }
+    }
+    
+    // Then try case-insensitive search
+    for (const [fieldName, fieldData] of Object.entries(fieldAnalytics)) {
+        if (fieldData.field_type === 'number') {
+            const lowerFieldName = fieldName.toLowerCase();
+            if (lowerFieldName.includes('profit') || lowerFieldName.includes('loss') || 
+                lowerFieldName.includes('pnl') || lowerFieldName.includes('p&l')) {
+                console.log('Found case-insensitive match field:', fieldName);
+                return fieldData;
+            }
+        }
+    }
+    
+    console.log('No profit/loss field found');
+    return null;
+}
+
+function calculateWinRate(fieldAnalytics) {
+    const profitLossField = findProfitLossField(fieldAnalytics);
+    if (!profitLossField || !profitLossField.sample_values) return 0;
+    
+    const values = profitLossField.sample_values;
+    const winningTrades = values.filter(val => parseFloat(val) > 0).length;
+    return values.length > 0 ? (winningTrades / values.length) * 100 : 0;
+}
+
+function calculateActivityStreak(dailyActivity) {
+    if (!dailyActivity) return 0;
+    
+    const dates = Object.keys(dailyActivity).sort().reverse();
+    const today = new Date().toISOString().split('T')[0];
+    
+    let streak = 0;
+    for (let i = 0; i < dates.length; i++) {
+        const expectedDate = new Date();
+        expectedDate.setDate(expectedDate.getDate() - i);
+        const expectedDateStr = expectedDate.toISOString().split('T')[0];
+        
+        if (dates[i] === expectedDateStr) {
+            streak++;
+        } else {
+            break;
+        }
+    }
+    
+    return streak;
+}
+
+function calculateConsistency(dailyActivity) {
+    if (!dailyActivity) return 0;
+    
+    const daysInMonth = new Date().getDate();
+    const activeDays = Object.keys(dailyActivity).filter(date => {
+        const entryDate = new Date(date);
+        const now = new Date();
+        return entryDate.getMonth() === now.getMonth() && entryDate.getFullYear() === now.getFullYear();
+    }).length;
+    
+    return (activeDays / daysInMonth) * 100;
+}
+
+function showFullCalendarModal(logTypeId, calendarType) {
+    // This will show a full-screen modal with detailed calendar
+    console.log('Show full calendar modal for:', logTypeId, calendarType);
+    // Implementation for full calendar modal can be added here
+}
+
+// Navigate calendar months (placeholder for future enhancement)
+function navigateMonth(direction) {
+    console.log('Navigate month:', direction);
+    showFeedback('Month navigation coming soon!', 'info');
+    // TODO: Implement month navigation
+}
+
+// Delete log entry
+async function deleteLogEntry(entryId) {
+    if (!confirm('Are you sure you want to delete this log entry? This action cannot be undone.')) {
+        return;
+    }
+    
+    try {
+        console.log('Deleting entry with ID:', entryId);
+        showFeedback('Deleting entry...', 'info');
+        
+        const response = await makeAuthenticatedRequest(`/api/logs/entries/${entryId}`, {
+            method: 'DELETE'
+        });
+        
+        console.log('Delete response status:', response.status);
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            console.error('Delete error:', errorData);
+            throw new Error(errorData.error || 'Failed to delete entry');
+        }
+        
+        // Remove the row from the table
+        const row = document.getElementById(`entry-row-${entryId}`);
+        if (row) {
+            row.remove();
+            console.log('Removed row from table');
+        }
+        
+        showFeedback('Entry deleted successfully!', 'success');
+        
+        // Refresh analytics if the analytics tab is active
+        const analyticsTab = document.getElementById('analytics-tab');
+        if (analyticsTab && analyticsTab.classList.contains('active')) {
+            console.log('Refreshing analytics after deleting entry...');
+            setTimeout(() => {
+                loadAnalytics();
+            }, 500);
+        }
+        
+        // Check if table is now empty
+        const tableBody = row?.closest('tbody');
+        if (tableBody && tableBody.children.length === 0) {
+            tableBody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No entries remaining</td></tr>';
+        }
+        
+    } catch (error) {
+        console.error('Error deleting entry:', error);
+        showFeedback(error.message, 'error');
+    }
 }
