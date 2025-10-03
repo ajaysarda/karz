@@ -916,3 +916,109 @@ body {
         height: 2rem;
     }
 }
+
+/* ============================================================================
+   AUTHENTICATION STYLES
+   ============================================================================ */
+
+/* Login Container */
+.login-container {
+    min-height: 100vh;
+    background: linear-gradient(135deg, var(--primary-color) 0%, var(--purple-color) 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.login-card {
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+    padding: 2rem;
+    max-width: 500px;
+    width: 100%;
+    text-align: center;
+}
+
+.login-header h1 {
+    color: var(--primary-color);
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+}
+
+.login-header .lead {
+    color: var(--secondary-color);
+    margin-bottom: 2rem;
+}
+
+/* Feature Preview */
+.feature-preview {
+    margin-bottom: 2rem;
+}
+
+.feature-icon {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--primary-color), var(--info-color));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 1rem;
+    color: white;
+    font-size: 1.5rem;
+}
+
+/* Google Login Button */
+.btn-google {
+    background: #4285f4;
+    border: none;
+    color: white;
+    font-weight: 600;
+    padding: 12px 24px;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(66, 133, 244, 0.3);
+}
+
+.btn-google:hover {
+    background: #3367d6;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(66, 133, 244, 0.4);
+    color: white;
+}
+
+/* Login Benefits */
+.login-benefits {
+    text-align: left;
+    background: var(--light-color);
+    border-radius: 8px;
+    padding: 1rem;
+}
+
+.login-benefits p {
+    margin-bottom: 0.5rem;
+}
+
+.login-benefits i {
+    color: var(--success-color);
+    width: 16px;
+}
+
+/* User Avatar */
+.user-avatar {
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Terms of Service Link Styling */
+.login-actions .text-center a {
+    color: var(--primary-color) !important;
+    font-weight: 500;
+}
+
+.login-actions .text-center a:hover {
+    color: var(--secondary-color) !important;
+    text-decoration: underline !important;
+}

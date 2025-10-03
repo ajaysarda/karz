@@ -15,8 +15,12 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/gorilla/sessions"
 	"github.com/joho/godotenv"
 	"github.com/sashabaranov/go-openai"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/google"
 )
 
 // Spelling Bee Types
@@ -154,6 +158,37 @@ type GameSettings struct {
 	Difficulty    string      `json:"difficulty"`
 }
 
+// Authentication Types
+type User struct {
+	ID          string    `json:"id"`
+	Email       string    `json:"email"`
+	Name        string    `json:"name"`
+	Picture     string    `json:"picture"`
+	GoogleID    string    `json:"googleId"`
+	CreatedAt   time.Time `json:"createdAt"`
+	LastLoginAt time.Time `json:"lastLoginAt"`
+}
+
+type AuthConfig struct {
+	GoogleOAuth  *oauth2.Config
+	SessionStore *sessions.CookieStore
+	JWTSecret    []byte
+}
+
+type GoogleUserInfo struct {
+	ID      string `json:"id"`
+	Email   string `json:"email"`
+	Name    string `json:"name"`
+	Picture string `json:"picture"`
+}
+
+type LoginResponse struct {
+	Success bool   `json:"success"`
+	User    *User  `json:"user,omitempty"`
+	Token   string `json:"token,omitempty"`
+	Message string `json:"message,omitempty"`
+}
+
 // Unified Generator
 type PuzzleHub struct {
 	OpenAIClient    *openai.Client
@@ -163,6 +198,8 @@ type PuzzleHub struct {
 	CacheDir        string
 	TotalCost       float64
 	YohakuGenerator *YohakuGenerator
+	AuthConfig      *AuthConfig
+	Users           map[string]*User // Simple in-memory user store
 }
 
 type YohakuGenerator struct {
@@ -233,6 +270,14 @@ func NewPuzzleHub(provider string) (*PuzzleHub, error) {
 	} else {
 		return nil, fmt.Errorf("AI_PROVIDER must be 'openai' or 'perplexity'. Please set PERPLEXITY_API_KEY or OPENAI_API_KEY environment variable")
 	}
+
+	// Initialize authentication
+	authConfig, err := initializeAuth()
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize auth: %v", err)
+	}
+	hub.AuthConfig = authConfig
+	hub.Users = make(map[string]*User)
 
 	return hub, nil
 }
@@ -994,10 +1039,121 @@ func setupRoutes(hub *PuzzleHub) *gin.Engine {
 	r.Static("/static", "./static")
 	r.LoadHTMLGlob("templates/*")
 
+	// Authentication routes (public)
+	auth := r.Group("/auth")
+	{
+		auth.GET("/google", func(c *gin.Context) {
+			if hub.AuthConfig.GoogleOAuth.ClientID == "" {
+				c.JSON(http.StatusServiceUnavailable, gin.H{
+					"error": "Google OAuth not configured. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables.",
+				})
+				return
+			}
+
+			state := fmt.Sprintf("state_%d", time.Now().UnixNano())
+			url := hub.AuthConfig.GoogleOAuth.AuthCodeURL(state, oauth2.AccessTypeOffline)
+			c.JSON(http.StatusOK, gin.H{"url": url})
+		})
+
+		auth.GET("/google/callback", func(c *gin.Context) {
+			code := c.Query("code")
+			if code == "" {
+				c.HTML(http.StatusBadRequest, "callback.html", gin.H{
+					"error": "Authorization code not provided",
+				})
+				return
+			}
+
+			// Exchange code for token
+			token, err := hub.AuthConfig.GoogleOAuth.Exchange(context.Background(), code)
+			if err != nil {
+				log.Printf("Failed to exchange code for token: %v", err)
+				c.HTML(http.StatusInternalServerError, "callback.html", gin.H{
+					"error": "Failed to exchange authorization code",
+				})
+				return
+			}
+
+			// Get user info from Google
+			googleUser, err := hub.getUserFromGoogle(token.AccessToken)
+			if err != nil {
+				log.Printf("Failed to get user info from Google: %v", err)
+				c.HTML(http.StatusInternalServerError, "callback.html", gin.H{
+					"error": "Failed to get user information",
+				})
+				return
+			}
+
+			// Create or update user
+			user := hub.createOrUpdateUser(googleUser)
+
+			// Generate JWT token
+			jwtToken, err := hub.generateJWT(user)
+			if err != nil {
+				log.Printf("Failed to generate JWT: %v", err)
+				c.HTML(http.StatusInternalServerError, "callback.html", gin.H{
+					"error": "Failed to generate authentication token",
+				})
+				return
+			}
+
+			// Return success page that will communicate with parent window
+			c.HTML(http.StatusOK, "callback.html", gin.H{
+				"success": true,
+				"result": LoginResponse{
+					Success: true,
+					User:    user,
+					Token:   jwtToken,
+					Message: "Login successful",
+				},
+			})
+		})
+
+		auth.POST("/logout", func(c *gin.Context) {
+			// For JWT, logout is handled client-side by removing the token
+			c.JSON(http.StatusOK, gin.H{"message": "Logged out successfully"})
+		})
+
+		auth.GET("/me", func(c *gin.Context) {
+			authHeader := c.GetHeader("Authorization")
+			if authHeader == "" {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "No authorization token provided"})
+				return
+			}
+
+			parts := strings.Split(authHeader, " ")
+			if len(parts) != 2 || parts[0] != "Bearer" {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid authorization header format"})
+				return
+			}
+
+			user, err := hub.validateJWT(parts[1])
+			if err != nil {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+				return
+			}
+
+			c.JSON(http.StatusOK, gin.H{"user": user})
+		})
+	}
+
 	// Main page - puzzle selection
 	r.GET("/", func(c *gin.Context) {
 		c.HTML(http.StatusOK, "index.html", gin.H{
 			"title": "Puzzle Hub - Choose Your Game",
+		})
+	})
+
+	// Legal pages (public)
+	r.GET("/terms", func(c *gin.Context) {
+		c.HTML(http.StatusOK, "terms.html", gin.H{
+			"title": "Terms of Service - Puzzle Hub",
+		})
+	})
+
+	r.GET("/privacy", func(c *gin.Context) {
+		c.HTML(http.StatusOK, "privacy.html", gin.H{
+			"title": "Privacy Policy - Puzzle Hub",
 		})
 	})
 
@@ -1006,8 +1162,9 @@ func setupRoutes(hub *PuzzleHub) *gin.Engine {
 		c.Status(http.StatusNoContent)
 	})
 
-	// API routes
+	// API routes (protected)
 	api := r.Group("/api")
+	api.Use(hub.authMiddleware()) // Apply authentication middleware to all API routes
 	{
 		// Spelling Bee endpoints
 		api.POST("/spelling/generate", func(c *gin.Context) {
@@ -1190,6 +1347,177 @@ func determineDifficultyLevel(age int) DifficultyLevel {
 		return Intermediate
 	default:
 		return Advanced
+	}
+}
+
+// Authentication Functions
+func initializeAuth() (*AuthConfig, error) {
+	// Get OAuth credentials from environment
+	clientID := os.Getenv("GOOGLE_CLIENT_ID")
+	clientSecret := os.Getenv("GOOGLE_CLIENT_SECRET")
+	baseURL := os.Getenv("BASE_URL")
+
+	// Auto-detect base URL based on environment
+	if baseURL == "" {
+		if os.Getenv("RENDER") != "" || os.Getenv("NODE_ENV") == "production" {
+			baseURL = "https://karz.onrender.com"
+		} else {
+			baseURL = "http://localhost:8995"
+		}
+	}
+
+	log.Printf("🔐 Initializing OAuth with base URL: %s", baseURL)
+
+	// Generate JWT secret
+	jwtSecret := make([]byte, 32)
+	if _, err := rand.Read(jwtSecret); err != nil {
+		return nil, fmt.Errorf("failed to generate JWT secret: %v", err)
+	}
+
+	// Configure Google OAuth
+	googleOAuth := &oauth2.Config{
+		ClientID:     clientID,
+		ClientSecret: clientSecret,
+		RedirectURL:  baseURL + "/auth/google/callback",
+		Scopes:       []string{"openid", "profile", "email"},
+		Endpoint:     google.Endpoint,
+	}
+
+	// Create session store
+	sessionSecret := make([]byte, 32)
+	if _, err := rand.Read(sessionSecret); err != nil {
+		return nil, fmt.Errorf("failed to generate session secret: %v", err)
+	}
+	sessionStore := sessions.NewCookieStore(sessionSecret)
+
+	return &AuthConfig{
+		GoogleOAuth:  googleOAuth,
+		SessionStore: sessionStore,
+		JWTSecret:    jwtSecret,
+	}, nil
+}
+
+func (h *PuzzleHub) generateJWT(user *User) (string, error) {
+	claims := jwt.MapClaims{
+		"user_id": user.ID,
+		"email":   user.Email,
+		"name":    user.Name,
+		"exp":     time.Now().Add(24 * time.Hour).Unix(), // 24 hour expiration
+		"iat":     time.Now().Unix(),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(h.AuthConfig.JWTSecret)
+}
+
+func (h *PuzzleHub) validateJWT(tokenString string) (*User, error) {
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return h.AuthConfig.JWTSecret, nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+		userID, ok := claims["user_id"].(string)
+		if !ok {
+			return nil, fmt.Errorf("invalid user_id in token")
+		}
+
+		user, exists := h.Users[userID]
+		if !exists {
+			return nil, fmt.Errorf("user not found")
+		}
+
+		return user, nil
+	}
+
+	return nil, fmt.Errorf("invalid token")
+}
+
+func (h *PuzzleHub) getUserFromGoogle(accessToken string) (*GoogleUserInfo, error) {
+	resp, err := http.Get("https://www.googleapis.com/oauth2/v2/userinfo?access_token=" + accessToken)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var userInfo GoogleUserInfo
+	if err := json.NewDecoder(resp.Body).Decode(&userInfo); err != nil {
+		return nil, err
+	}
+
+	return &userInfo, nil
+}
+
+func (h *PuzzleHub) createOrUpdateUser(googleUser *GoogleUserInfo) *User {
+	// Check if user already exists
+	for _, user := range h.Users {
+		if user.GoogleID == googleUser.ID {
+			// Update last login
+			user.LastLoginAt = time.Now()
+			return user
+		}
+	}
+
+	// Create new user
+	user := &User{
+		ID:          fmt.Sprintf("user_%d", time.Now().UnixNano()),
+		Email:       googleUser.Email,
+		Name:        googleUser.Name,
+		Picture:     googleUser.Picture,
+		GoogleID:    googleUser.ID,
+		CreatedAt:   time.Now(),
+		LastLoginAt: time.Now(),
+	}
+
+	h.Users[user.ID] = user
+	return user
+}
+
+// Middleware for authentication
+func (h *PuzzleHub) authMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Skip auth for public endpoints
+		path := c.Request.URL.Path
+		if strings.HasPrefix(path, "/static/") ||
+			strings.HasPrefix(path, "/auth/") ||
+			path == "/" ||
+			path == "/favicon.ico" {
+			c.Next()
+			return
+		}
+
+		// Check for JWT token in Authorization header
+		authHeader := c.GetHeader("Authorization")
+		if authHeader == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header required"})
+			c.Abort()
+			return
+		}
+
+		// Extract token from "Bearer <token>"
+		parts := strings.Split(authHeader, " ")
+		if len(parts) != 2 || parts[0] != "Bearer" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid authorization header format"})
+			c.Abort()
+			return
+		}
+
+		user, err := h.validateJWT(parts[1])
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+			c.Abort()
+			return
+		}
+
+		// Add user to context
+		c.Set("user", user)
+		c.Next()
 	}
 }
 

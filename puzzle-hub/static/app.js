@@ -4,6 +4,11 @@
 let currentPuzzleType = null; // 'spelling' or 'yohaku'
 let gameState = 'idle'; // 'idle', 'playing', 'finished'
 
+// Authentication state
+let currentUser = null;
+let authToken = null;
+let isAuthenticated = false;
+
 // Player profile
 let playerProfile = {
     name: '',
@@ -40,6 +45,9 @@ let speechSynthesis = window.speechSynthesis;
 // Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Puzzle Hub loaded!');
+    
+    // Initialize authentication first
+    initializeAuth();
     loadProfile();
     updateStats();
     
@@ -139,17 +147,19 @@ function resetAllGames() {
 
 // Spelling Bee Functions
 async function startSpellingGame() {
+    if (!isAuthenticated) {
+        showFeedback('Please login to play games', 'error');
+        return;
+    }
+    
     const age = parseInt(document.getElementById('spellingAge').value);
     const theme = document.getElementById('spellingTheme').value;
     
     showLoading(true);
     
     try {
-        const response = await fetch('/api/spelling/generate-for-age', {
+        const response = await makeAuthenticatedRequest('/api/spelling/generate-for-age', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
             body: JSON.stringify({
                 age: age,
                 count: 10,
@@ -1681,4 +1691,304 @@ function clearWritingAnalysis() {
     hidePreviousAnalysisButton();
     
     showFeedback('Analysis cleared successfully!', 'success');
+}
+
+// ============================================================================
+// AUTHENTICATION FUNCTIONALITY
+// ============================================================================
+
+// Initialize authentication on page load
+function initializeAuth() {
+    // Check for stored auth token
+    const storedToken = localStorage.getItem('authToken');
+    const storedUser = localStorage.getItem('currentUser');
+    
+    if (storedToken && storedUser) {
+        authToken = storedToken;
+        currentUser = JSON.parse(storedUser);
+        isAuthenticated = true;
+        
+        // Verify token is still valid
+        verifyAuthToken().then(valid => {
+            if (valid) {
+                updateAuthUI();
+            } else {
+                logout();
+            }
+        });
+    } else {
+        showLoginScreen();
+    }
+}
+
+// Verify auth token with server
+async function verifyAuthToken() {
+    if (!authToken) return false;
+    
+    try {
+        const response = await fetch('/auth/me', {
+            headers: {
+                'Authorization': `Bearer ${authToken}`
+            }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            currentUser = data.user;
+            localStorage.setItem('currentUser', JSON.stringify(currentUser));
+            return true;
+        }
+        return false;
+    } catch (error) {
+        console.error('Token verification failed:', error);
+        return false;
+    }
+}
+
+// Show login screen
+function showLoginScreen() {
+    document.body.innerHTML = `
+        <div class="login-container">
+            <div class="login-card">
+                <div class="login-header">
+                    <h1>
+                        <i class="fas fa-puzzle-piece me-2"></i>
+                        Puzzle Hub
+                        <span class="badge bg-danger text-white ms-2 fw-bold">BETA</span>
+                    </h1>
+                    <div class="alert alert-danger d-inline-block px-3 py-2 mb-3">
+                        <i class="fas fa-flask me-2"></i>
+                        <strong>Beta Version</strong> - Currently in testing phase
+                    </div>
+                    <p class="lead">Your Learning Adventure Awaits</p>
+                </div>
+                
+                <div class="login-content">
+                    <div class="feature-preview">
+                        <div class="row">
+                            <div class="col-md-4 text-center mb-3">
+                                <div class="feature-icon">
+                                    <i class="fas fa-spell-check"></i>
+                                </div>
+                                <h5>Spelling Bee</h5>
+                                <p class="small">Master words with AI-powered challenges</p>
+                            </div>
+                            <div class="col-md-4 text-center mb-3">
+                                <div class="feature-icon">
+                                    <i class="fas fa-calculator"></i>
+                                </div>
+                                <h5>Yohaku Puzzles</h5>
+                                <p class="small">Solve mathematical grid challenges</p>
+                            </div>
+                            <div class="col-md-4 text-center mb-3">
+                                <div class="feature-icon">
+                                    <i class="fas fa-pen-fancy"></i>
+                                </div>
+                                <h5>Writing Coach</h5>
+                                <p class="small">Improve your writing with AI feedback</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="login-actions">
+                        <button class="btn btn-google btn-lg w-100 mb-3" onclick="loginWithGoogle()">
+                            <i class="fab fa-google me-2"></i>
+                            Continue with Google
+                        </button>
+                        
+                        <div class="text-center mb-4">
+                            <small class="text-muted">
+                                By continuing, you agree to our <a href="/terms" target="_blank" class="text-decoration-none">terms of service</a>. 
+                                We only store your name and email for personalization.
+                            </small>
+                        </div>
+                        
+                        <div class="login-benefits">
+                            <p class="small text-muted mb-2">
+                                <i class="fas fa-shield-alt me-1"></i>
+                                Secure login powered by Google
+                            </p>
+                            <p class="small text-muted mb-2">
+                                <i class="fas fa-chart-line me-1"></i>
+                                Track your progress across all games
+                            </p>
+                            <p class="small text-muted">
+                                <i class="fas fa-sync me-1"></i>
+                                Sync your achievements across devices
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="login-footer">
+                    <p class="small text-muted">
+                        <i class="fas fa-shield-alt me-1"></i>
+                        Secure authentication powered by Google
+                    </p>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// Login with Google
+async function loginWithGoogle() {
+    try {
+        showFeedback('Connecting to Google...', 'info');
+        
+        // Get Google OAuth URL from server
+        const response = await fetch('/auth/google');
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to get Google login URL');
+        }
+        
+        const data = await response.json();
+        
+        // Open Google OAuth in popup
+        const popup = window.open(
+            data.url, 
+            'google-login', 
+            'width=500,height=600,scrollbars=yes,resizable=yes'
+        );
+        
+        // Listen for popup messages
+        let loginCompleted = false; // Flag to track if login completed successfully
+        
+        const messageListener = (event) => {
+            if (event.origin !== window.location.origin) return;
+            
+            if (event.data.type === 'GOOGLE_AUTH_SUCCESS') {
+                loginCompleted = true; // Mark login as completed
+                popup.close();
+                handleLoginSuccess(event.data.result);
+                window.removeEventListener('message', messageListener);
+            } else if (event.data.type === 'GOOGLE_AUTH_ERROR') {
+                loginCompleted = true; // Mark login as completed (with error)
+                popup.close();
+                showFeedback('Login failed: ' + event.data.error, 'error');
+                window.removeEventListener('message', messageListener);
+            }
+        };
+        
+        window.addEventListener('message', messageListener);
+        
+        // Check if popup was closed manually (only show cancelled if not completed)
+        const checkClosed = setInterval(() => {
+            if (popup.closed) {
+                clearInterval(checkClosed);
+                window.removeEventListener('message', messageListener);
+                
+                // Only show "cancelled" if login wasn't completed successfully
+                if (!loginCompleted) {
+                    showFeedback('Login cancelled', 'warning');
+                }
+            }
+        }, 1000);
+        
+    } catch (error) {
+        console.error('Login error:', error);
+        showFeedback('Login failed: ' + error.message, 'error');
+    }
+}
+
+// Handle successful login
+function handleLoginSuccess(loginResult) {
+    authToken = loginResult.token;
+    currentUser = loginResult.user;
+    isAuthenticated = true;
+    
+    // Store in localStorage
+    localStorage.setItem('authToken', authToken);
+    localStorage.setItem('currentUser', JSON.stringify(currentUser));
+    
+    showFeedback(`Welcome back, ${currentUser.name}!`, 'success');
+    
+    // Reload the main application
+    setTimeout(() => {
+        window.location.reload();
+    }, 1500);
+}
+
+// Logout function
+function logout() {
+    // Clear local storage
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('currentUser');
+    
+    // Reset state
+    authToken = null;
+    currentUser = null;
+    isAuthenticated = false;
+    
+    // Show login screen
+    showLoginScreen();
+    showFeedback('Logged out successfully', 'info');
+}
+
+// Update authentication UI elements
+function updateAuthUI() {
+    if (!isAuthenticated || !currentUser) return;
+    
+    // Update page title with user name
+    document.title = `Puzzle Hub - Welcome ${currentUser.name}`;
+    
+    // Add user info to navigation if it exists
+    const navbarNav = document.querySelector('.navbar-nav');
+    if (navbarNav) {
+        const userNavItem = document.createElement('li');
+        userNavItem.className = 'nav-item dropdown ms-auto';
+        userNavItem.innerHTML = `
+            <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" 
+               id="userDropdown" role="button" data-bs-toggle="dropdown">
+                <img src="${currentUser.picture}" alt="${currentUser.name}" 
+                     class="user-avatar me-2" width="32" height="32">
+                <span class="d-none d-md-inline">${currentUser.name}</span>
+            </a>
+            <ul class="dropdown-menu dropdown-menu-end">
+                <li><h6 class="dropdown-header">${currentUser.name}</h6></li>
+                <li><span class="dropdown-item-text small text-muted">${currentUser.email}</span></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item" href="#" onclick="showProfile()">
+                    <i class="fas fa-user me-2"></i>Profile
+                </a></li>
+                <li><a class="dropdown-item" href="#" onclick="showProgress()">
+                    <i class="fas fa-chart-line me-2"></i>Progress
+                </a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item text-danger" href="#" onclick="logout()">
+                    <i class="fas fa-sign-out-alt me-2"></i>Logout
+                </a></li>
+            </ul>
+        `;
+        navbarNav.appendChild(userNavItem);
+    }
+}
+
+// Show user profile
+function showProfile() {
+    alert(`Profile: ${currentUser.name}\nEmail: ${currentUser.email}\nMember since: ${new Date(currentUser.createdAt).toLocaleDateString()}`);
+}
+
+// Show user progress
+function showProgress() {
+    alert('Progress tracking feature coming soon!');
+}
+
+// Add authentication to API requests
+function makeAuthenticatedRequest(url, options = {}) {
+    if (!authToken) {
+        throw new Error('No authentication token available');
+    }
+    
+    const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+        ...options.headers
+    };
+    
+    return fetch(url, {
+        ...options,
+        headers
+    });
 }
