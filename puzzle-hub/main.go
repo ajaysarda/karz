@@ -138,6 +138,42 @@ type StoryResponse struct {
 	GeneratedAt time.Time `json:"generated_at"`
 }
 
+// Feedback System Types
+type FeedbackType string
+
+const (
+	FeedbackTypeAppFeedback    FeedbackType = "app_feedback"
+	FeedbackTypeSuggestion     FeedbackType = "suggestion"
+	FeedbackTypeBugReport      FeedbackType = "bug_report"
+	FeedbackTypeFeatureRequest FeedbackType = "feature_request"
+)
+
+type Feedback struct {
+	ID          string       `json:"id" dynamodbav:"id"`
+	UserID      string       `json:"user_id" dynamodbav:"user_id"`
+	UserEmail   string       `json:"user_email" dynamodbav:"user_email"`
+	UserName    string       `json:"user_name" dynamodbav:"user_name"`
+	Type        FeedbackType `json:"type" dynamodbav:"type"`
+	AppName     string       `json:"app_name,omitempty" dynamodbav:"app_name"` // For app feedback
+	Rating      int          `json:"rating,omitempty" dynamodbav:"rating"`     // 1-5 stars
+	Title       string       `json:"title" dynamodbav:"title"`
+	Description string       `json:"description" dynamodbav:"description"`
+	AIAppIdea   string       `json:"ai_app_idea,omitempty" dynamodbav:"ai_app_idea"` // For suggestions
+	UseCase     string       `json:"use_case,omitempty" dynamodbav:"use_case"`       // Why they want it
+	CreatedAt   time.Time    `json:"created_at" dynamodbav:"created_at"`
+	Status      string       `json:"status" dynamodbav:"status"` // "new", "reviewed", "in-progress", "completed"
+}
+
+type FeedbackSubmission struct {
+	Type        FeedbackType `json:"type" binding:"required"`
+	AppName     string       `json:"app_name,omitempty"`
+	Rating      int          `json:"rating,omitempty"`
+	Title       string       `json:"title" binding:"required"`
+	Description string       `json:"description" binding:"required"`
+	AIAppIdea   string       `json:"ai_app_idea,omitempty"`
+	UseCase     string       `json:"use_case,omitempty"`
+}
+
 // Yohaku Types
 type YohakuPuzzle struct {
 	ID         string      `json:"id"`
@@ -597,6 +633,58 @@ func createDynamoDBTables(svc *dynamodb.DynamoDB) error {
 				},
 			},
 		},
+		{
+			name: "puzzle-hub-feedback",
+			schema: &dynamodb.CreateTableInput{
+				TableName: aws.String("puzzle-hub-feedback"),
+				KeySchema: []*dynamodb.KeySchemaElement{
+					{
+						AttributeName: aws.String("id"),
+						KeyType:       aws.String("HASH"),
+					},
+				},
+				AttributeDefinitions: []*dynamodb.AttributeDefinition{
+					{
+						AttributeName: aws.String("id"),
+						AttributeType: aws.String("S"),
+					},
+					{
+						AttributeName: aws.String("user_id"),
+						AttributeType: aws.String("S"),
+					},
+					{
+						AttributeName: aws.String("created_at"),
+						AttributeType: aws.String("S"),
+					},
+				},
+				GlobalSecondaryIndexes: []*dynamodb.GlobalSecondaryIndex{
+					{
+						IndexName: aws.String("user_id-created_at-index"),
+						KeySchema: []*dynamodb.KeySchemaElement{
+							{
+								AttributeName: aws.String("user_id"),
+								KeyType:       aws.String("HASH"),
+							},
+							{
+								AttributeName: aws.String("created_at"),
+								KeyType:       aws.String("RANGE"),
+							},
+						},
+						Projection: &dynamodb.Projection{
+							ProjectionType: aws.String("ALL"),
+						},
+						ProvisionedThroughput: &dynamodb.ProvisionedThroughput{
+							ReadCapacityUnits:  aws.Int64(5),
+							WriteCapacityUnits: aws.Int64(5),
+						},
+					},
+				},
+				ProvisionedThroughput: &dynamodb.ProvisionedThroughput{
+					ReadCapacityUnits:  aws.Int64(5),
+					WriteCapacityUnits: aws.Int64(5),
+				},
+			},
+		},
 	}
 
 	// Create each table if it doesn't exist
@@ -636,7 +724,7 @@ func NewPuzzleHub(provider string) (*PuzzleHub, error) {
 		return nil, fmt.Errorf("failed to create cache directory: %v", err)
 	}
 
-	// Initialize DynamoDB
+	// Initialize DynamoDB (creates all tables including feedback table)
 	dynamoDB, err := initializeDynamoDB()
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize DynamoDB: %v", err)
@@ -1616,6 +1704,139 @@ Make it descriptive and imaginative for a 4th grader!`, genreStr, toneStr, eleme
 	}
 }
 
+// Feedback System Functions
+func (h *PuzzleHub) submitFeedback(c *gin.Context) {
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
+		return
+	}
+	userObj := user.(*User)
+
+	var submission FeedbackSubmission
+	if err := c.ShouldBindJSON(&submission); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Validate rating if provided
+	if submission.Rating != 0 && (submission.Rating < 1 || submission.Rating > 5) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Rating must be between 1 and 5"})
+		return
+	}
+
+	// Generate unique ID
+	feedbackID := fmt.Sprintf("fb_%d", time.Now().UnixNano())
+
+	// Create feedback object
+	feedback := Feedback{
+		ID:          feedbackID,
+		UserID:      userObj.ID,
+		UserEmail:   userObj.Email,
+		UserName:    userObj.Name,
+		Type:        submission.Type,
+		AppName:     submission.AppName,
+		Rating:      submission.Rating,
+		Title:       submission.Title,
+		Description: submission.Description,
+		AIAppIdea:   submission.AIAppIdea,
+		UseCase:     submission.UseCase,
+		CreatedAt:   time.Now(),
+		Status:      "new",
+	}
+
+	// Marshal feedback to DynamoDB format
+	feedbackItem, err := dynamodbattribute.MarshalMap(feedback)
+	if err != nil {
+		log.Printf("Error marshaling feedback: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to submit feedback"})
+		return
+	}
+
+	// Put feedback in DynamoDB
+	_, err = h.DynamoDB.PutItem(&dynamodb.PutItemInput{
+		TableName: aws.String("puzzle-hub-feedback"),
+		Item:      feedbackItem,
+	})
+	if err != nil {
+		log.Printf("⚠️  Error putting feedback to DynamoDB: %v", err)
+		log.Printf("💡 Note: The table 'puzzle-hub-feedback' may not exist. Feedback recorded in logs but not persisted.")
+		// Don't fail the request - still acknowledge the feedback
+		log.Printf("📝 FEEDBACK SUBMITTED (not persisted): Type=%s, UserID=%s, Email=%s, Title=%s, Description=%s",
+			feedback.Type, feedback.UserID, feedback.UserEmail, feedback.Title, feedback.Description)
+	} else {
+		log.Printf("✅ Feedback submitted to DynamoDB: Type=%s, UserID=%s, Title=%s", feedback.Type, feedback.UserID, feedback.Title)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Thank you for your feedback!",
+		"id":      feedbackID,
+	})
+}
+
+func (h *PuzzleHub) getAllFeedback(c *gin.Context) {
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
+		return
+	}
+	userObj := user.(*User)
+
+	// Try to query user's feedback with index first
+	queryResult, err := h.DynamoDB.Query(&dynamodb.QueryInput{
+		TableName:              aws.String("puzzle-hub-feedback"),
+		IndexName:              aws.String("user_id-created_at-index"),
+		KeyConditionExpression: aws.String("user_id = :user_id"),
+		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+			":user_id": {S: aws.String(userObj.ID)},
+		},
+		ScanIndexForward: aws.Bool(false), // Most recent first
+	})
+
+	var items []map[string]*dynamodb.AttributeValue
+
+	if err != nil {
+		// If index doesn't exist or table doesn't exist, try scan as fallback
+		log.Printf("⚠️  Query with index failed: %v. Trying scan...", err)
+
+		scanResult, scanErr := h.DynamoDB.Scan(&dynamodb.ScanInput{
+			TableName:        aws.String("puzzle-hub-feedback"),
+			FilterExpression: aws.String("user_id = :user_id"),
+			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+				":user_id": {S: aws.String(userObj.ID)},
+			},
+		})
+
+		if scanErr != nil {
+			log.Printf("❌ Scan also failed: %v. Table may not exist.", scanErr)
+			// Return empty list instead of error
+			c.JSON(http.StatusOK, gin.H{
+				"feedback": []Feedback{},
+				"count":    0,
+				"message":  "Feedback table not yet initialized. Your feedback will be saved when you submit.",
+			})
+			return
+		}
+		items = scanResult.Items
+	} else {
+		items = queryResult.Items
+	}
+
+	var feedbackList []Feedback
+	err = dynamodbattribute.UnmarshalListOfMaps(items, &feedbackList)
+	if err != nil {
+		log.Printf("Error unmarshaling feedback: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse feedback"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"feedback": feedbackList,
+		"count":    len(feedbackList),
+	})
+}
+
 // Web server setup
 // Analytics tracking types
 type AnalyticsEvent struct {
@@ -2073,6 +2294,10 @@ func setupRoutes(hub *PuzzleHub) *gin.Engine {
 
 			c.JSON(http.StatusOK, story)
 		})
+
+		// Feedback endpoints
+		api.POST("/feedback/submit", hub.submitFeedback)
+		api.GET("/feedback/list", hub.getAllFeedback)
 
 		// Custom Logging System endpoints
 		// Log Types

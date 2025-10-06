@@ -4006,3 +4006,223 @@ function copyStoryToClipboard() {
         showFeedback('Failed to copy to clipboard', 'error');
     });
 }
+
+// ================================
+// Feedback System Functions
+// ================================
+
+let selectedRating = 0;
+
+// Initialize feedback system when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    setupStarRating();
+    setupFeedbackForm();
+    
+    // Load feedback history when tab is shown
+    const feedbackTab = document.getElementById('feedback-tab');
+    if (feedbackTab) {
+        feedbackTab.addEventListener('click', loadFeedbackHistory);
+    }
+});
+
+function setupStarRating() {
+    const starRating = document.getElementById('starRating');
+    if (!starRating) return;
+    
+    const stars = starRating.querySelectorAll('i');
+    stars.forEach(star => {
+        star.addEventListener('click', function() {
+            selectedRating = parseInt(this.dataset.rating);
+            document.getElementById('rating').value = selectedRating;
+            updateStarDisplay(selectedRating);
+        });
+        
+        star.addEventListener('mouseenter', function() {
+            const rating = parseInt(this.dataset.rating);
+            updateStarDisplay(rating);
+        });
+    });
+    
+    starRating.addEventListener('mouseleave', function() {
+        updateStarDisplay(selectedRating);
+    });
+}
+
+function updateStarDisplay(rating) {
+    const stars = document.querySelectorAll('#starRating i');
+    stars.forEach(star => {
+        const starRating = parseInt(star.dataset.rating);
+        if (starRating <= rating) {
+            star.classList.add('active');
+        } else {
+            star.classList.remove('active');
+        }
+    });
+}
+
+function handleFeedbackTypeChange() {
+    const feedbackType = document.getElementById('feedbackType').value;
+    const appFeedbackSection = document.getElementById('appFeedbackSection');
+    const suggestionSection = document.getElementById('suggestionSection');
+    
+    // Hide all sections first
+    appFeedbackSection.style.display = 'none';
+    suggestionSection.style.display = 'none';
+    
+    // Show relevant section
+    if (feedbackType === 'app_feedback') {
+        appFeedbackSection.style.display = 'block';
+    } else if (feedbackType === 'suggestion') {
+        suggestionSection.style.display = 'block';
+    }
+}
+
+function setupFeedbackForm() {
+    const feedbackForm = document.getElementById('feedbackForm');
+    if (!feedbackForm) return;
+    
+    feedbackForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const feedbackType = document.getElementById('feedbackType').value;
+        const title = document.getElementById('feedbackTitle').value;
+        const description = document.getElementById('feedbackDescription').value;
+        
+        const submission = {
+            type: feedbackType,
+            title: title,
+            description: description
+        };
+        
+        // Add app-specific fields
+        if (feedbackType === 'app_feedback') {
+            submission.app_name = document.getElementById('appName').value;
+            const rating = document.getElementById('rating').value;
+            if (rating > 0) {
+                submission.rating = parseInt(rating);
+            }
+        }
+        
+        // Add suggestion-specific fields
+        if (feedbackType === 'suggestion') {
+            submission.ai_app_idea = document.getElementById('aiAppIdea').value;
+            submission.use_case = document.getElementById('useCase').value;
+        }
+        
+        try {
+            const response = await fetch('/api/feedback/submit', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${authToken}`
+                },
+                body: JSON.stringify(submission)
+            });
+            
+            if (!response.ok) {
+                throw new Error('Failed to submit feedback');
+            }
+            
+            const data = await response.json();
+            
+            showFeedback('Thank you for your feedback! 🎉', 'success');
+            
+            // Reset form
+            feedbackForm.reset();
+            selectedRating = 0;
+            updateStarDisplay(0);
+            handleFeedbackTypeChange();
+            
+            // Reload feedback history
+            loadFeedbackHistory();
+            
+        } catch (error) {
+            console.error('Error submitting feedback:', error);
+            showFeedback('Failed to submit feedback. Please try again.', 'error');
+        }
+    });
+}
+
+async function loadFeedbackHistory() {
+    const feedbackHistory = document.getElementById('feedbackHistory');
+    if (!feedbackHistory) return;
+    
+    try {
+        const response = await fetch('/api/feedback/list', {
+            headers: {
+                'Authorization': `Bearer ${authToken}`
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to load feedback');
+        }
+        
+        const data = await response.json();
+        const feedbackList = data.feedback || [];
+        
+        if (feedbackList.length === 0) {
+            const message = data.message || "No feedback submitted yet. Share your thoughts above!";
+            feedbackHistory.innerHTML = `
+                <div class="text-center py-4">
+                    <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                    <p class="text-muted">${message}</p>
+                </div>
+            `;
+            return;
+        }
+        
+        let html = '';
+        feedbackList.forEach(fb => {
+            const date = new Date(fb.created_at).toLocaleDateString();
+            const typeLabel = getFeedbackTypeLabel(fb.type);
+            const statusClass = `status-${fb.status}`;
+            
+            html += `
+                <div class="card feedback-item mb-3">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div>
+                                <span class="badge bg-primary feedback-badge">${typeLabel}</span>
+                                ${fb.app_name ? `<span class="badge bg-secondary feedback-badge">${fb.app_name}</span>` : ''}
+                                ${fb.rating ? `<span class="badge bg-warning feedback-badge">${'⭐'.repeat(fb.rating)}</span>` : ''}
+                            </div>
+                            <span class="feedback-status ${statusClass}">${fb.status}</span>
+                        </div>
+                        <h5 class="card-title">${escapeHtml(fb.title)}</h5>
+                        <p class="card-text text-muted">${escapeHtml(fb.description)}</p>
+                        ${fb.ai_app_idea ? `<p class="mb-1"><strong>App Idea:</strong> ${escapeHtml(fb.ai_app_idea)}</p>` : ''}
+                        ${fb.use_case ? `<p class="mb-1"><strong>Use Case:</strong> ${escapeHtml(fb.use_case)}</p>` : ''}
+                        <small class="text-muted"><i class="fas fa-clock me-1"></i>${date}</small>
+                    </div>
+                </div>
+            `;
+        });
+        
+        feedbackHistory.innerHTML = html;
+        
+    } catch (error) {
+        console.error('Error loading feedback history:', error);
+        feedbackHistory.innerHTML = `
+            <div class="alert alert-danger">
+                Failed to load feedback history. Please try again.
+            </div>
+        `;
+    }
+}
+
+function getFeedbackTypeLabel(type) {
+    const labels = {
+        'app_feedback': 'App Feedback',
+        'suggestion': 'AI App Suggestion',
+        'bug_report': 'Bug Report',
+        'feature_request': 'Feature Request'
+    };
+    return labels[type] || type;
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}

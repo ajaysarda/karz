@@ -1450,3 +1450,71 @@ body {
         font-size: 10px;
     }
 }
+
+/* Feedback System Styles */
+.star-rating {
+    font-size: 2rem;
+    display: inline-flex;
+    gap: 0.5rem;
+    cursor: pointer;
+}
+
+.star-rating i {
+    color: #ddd;
+    transition: color 0.2s;
+}
+
+.star-rating i:hover,
+.star-rating i.active {
+    color: #ffc107;
+}
+
+.feedback-section {
+    background: #f8f9fa;
+    padding: 1.5rem;
+    border-radius: 10px;
+    margin-bottom: 1.5rem;
+}
+
+.feedback-item {
+    border-left: 4px solid #28a745;
+    transition: all 0.3s;
+}
+
+.feedback-item:hover {
+    transform: translateX(5px);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.feedback-badge {
+    font-size: 0.8rem;
+    padding: 0.25rem 0.75rem;
+}
+
+.feedback-status {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.status-new {
+    background-color: #17a2b8;
+    color: white;
+}
+
+.status-reviewed {
+    background-color: #ffc107;
+    color: black;
+}
+
+.status-in-progress {
+    background-color: #007bff;
+    color: white;
+}
+
+.status-completed {
+    background-color: #28a745;
+    color: white;
+}
