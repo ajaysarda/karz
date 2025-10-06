@@ -396,6 +396,50 @@ func createDynamoDBTables(svc *dynamodb.DynamoDB) error {
 		schema *dynamodb.CreateTableInput
 	}{
 		{
+			name: "puzzle-hub-analytics",
+			schema: &dynamodb.CreateTableInput{
+				TableName: aws.String("puzzle-hub-analytics"),
+				KeySchema: []*dynamodb.KeySchemaElement{
+					{
+						AttributeName: aws.String("id"),
+						KeyType:       aws.String("HASH"),
+					},
+				},
+				AttributeDefinitions: []*dynamodb.AttributeDefinition{
+					{
+						AttributeName: aws.String("id"),
+						AttributeType: aws.String("S"),
+					},
+					{
+						AttributeName: aws.String("event_type"),
+						AttributeType: aws.String("S"),
+					},
+				},
+				GlobalSecondaryIndexes: []*dynamodb.GlobalSecondaryIndex{
+					{
+						IndexName: aws.String("event-type-index"),
+						KeySchema: []*dynamodb.KeySchemaElement{
+							{
+								AttributeName: aws.String("event_type"),
+								KeyType:       aws.String("HASH"),
+							},
+						},
+						Projection: &dynamodb.Projection{
+							ProjectionType: aws.String("ALL"),
+						},
+						ProvisionedThroughput: &dynamodb.ProvisionedThroughput{
+							ReadCapacityUnits:  aws.Int64(5),
+							WriteCapacityUnits: aws.Int64(5),
+						},
+					},
+				},
+				ProvisionedThroughput: &dynamodb.ProvisionedThroughput{
+					ReadCapacityUnits:  aws.Int64(5),
+					WriteCapacityUnits: aws.Int64(5),
+				},
+			},
+		},
+		{
 			name: "puzzle-hub-log-types",
 			schema: &dynamodb.CreateTableInput{
 				TableName: aws.String("puzzle-hub-log-types"),
@@ -1370,17 +1414,92 @@ func (h *PuzzleHub) parseWritingAnalysisResponse(response string, request Writin
 // Fallback method removed - Writing analysis now requires AI API keys
 
 // Web server setup
-// Analytics tracking
+// Analytics tracking types
+type AnalyticsEvent struct {
+	ID        string    `json:"id" dynamodbav:"id"`
+	EventType string    `json:"event_type" dynamodbav:"event_type"` // "visit", "login"
+	Timestamp time.Time `json:"timestamp" dynamodbav:"timestamp"`
+	IP        string    `json:"ip,omitempty" dynamodbav:"ip,omitempty"`
+	UserID    string    `json:"user_id,omitempty" dynamodbav:"user_id,omitempty"`
+	IsNew     bool      `json:"is_new" dynamodbav:"is_new"` // New visitor or new user
+}
+
+// In-memory cache for quick lookups (synced from DynamoDB on startup)
 var (
-	totalVisits   int64
-	totalLogins   int64
+	totalVisits    int64
+	totalLogins    int64
 	uniqueVisitors = make(map[string]bool) // Track by IP
 	uniqueUsers    = make(map[string]bool) // Track by User ID
+	analyticsDB    *dynamodb.DynamoDB
 )
 
 func logAnalytics() {
 	log.Printf("📊 ANALYTICS - Total Visits: %d | Unique Visitors: %d | Total Logins: %d | Unique Users: %d",
 		totalVisits, len(uniqueVisitors), totalLogins, len(uniqueUsers))
+}
+
+func saveAnalyticsEvent(eventType, ip, userID string, isNew bool) error {
+	event := AnalyticsEvent{
+		ID:        fmt.Sprintf("%s_%d", eventType, time.Now().UnixNano()),
+		EventType: eventType,
+		Timestamp: time.Now(),
+		IP:        ip,
+		UserID:    userID,
+		IsNew:     isNew,
+	}
+
+	item, err := dynamodbattribute.MarshalMap(event)
+	if err != nil {
+		return err
+	}
+
+	_, err = analyticsDB.PutItem(&dynamodb.PutItemInput{
+		TableName: aws.String("puzzle-hub-analytics"),
+		Item:      item,
+	})
+	return err
+}
+
+func loadAnalyticsFromDB(db *dynamodb.DynamoDB) error {
+	analyticsDB = db
+	
+	// Scan analytics table to rebuild in-memory cache
+	result, err := db.Scan(&dynamodb.ScanInput{
+		TableName: aws.String("puzzle-hub-analytics"),
+	})
+	if err != nil {
+		return err
+	}
+
+	visitorIPs := make(map[string]bool)
+	userIDs := make(map[string]bool)
+	
+	for _, item := range result.Items {
+		var event AnalyticsEvent
+		if err := dynamodbattribute.UnmarshalMap(item, &event); err != nil {
+			continue
+		}
+
+		if event.EventType == "visit" {
+			totalVisits++
+			if event.IP != "" {
+				visitorIPs[event.IP] = true
+			}
+		} else if event.EventType == "login" {
+			totalLogins++
+			if event.UserID != "" {
+				userIDs[event.UserID] = true
+			}
+		}
+	}
+
+	uniqueVisitors = visitorIPs
+	uniqueUsers = userIDs
+
+	log.Printf("📊 Loaded analytics from DynamoDB: %d visits, %d unique visitors, %d logins, %d unique users",
+		totalVisits, len(uniqueVisitors), totalLogins, len(uniqueUsers))
+	
+	return nil
 }
 
 func setupRoutes(hub *PuzzleHub) *gin.Engine {
@@ -1395,11 +1514,20 @@ func setupRoutes(hub *PuzzleHub) *gin.Engine {
 			
 			totalVisits++
 			clientIP := c.ClientIP()
-			if !uniqueVisitors[clientIP] {
+			isNewVisitor := !uniqueVisitors[clientIP]
+			
+			if isNewVisitor {
 				uniqueVisitors[clientIP] = true
 				log.Printf("🆕 New visitor from IP: %s | Total visits: %d | Unique visitors: %d",
 					clientIP, totalVisits, len(uniqueVisitors))
 			}
+			
+			// Save to DynamoDB (async to not slow down requests)
+			go func() {
+				if err := saveAnalyticsEvent("visit", clientIP, "", isNewVisitor); err != nil {
+					log.Printf("Warning: Failed to save visit event: %v", err)
+				}
+			}()
 			
 			// Log analytics every 10 visits
 			if totalVisits%10 == 0 {
@@ -1472,6 +1600,13 @@ func setupRoutes(hub *PuzzleHub) *gin.Engine {
 			} else {
 				log.Printf("🔄 Returning user login | Total logins: %d | Unique users: %d", totalLogins, len(uniqueUsers))
 			}
+			
+			// Save to DynamoDB (async)
+			go func() {
+				if err := saveAnalyticsEvent("login", "", user.ID, isNewUser); err != nil {
+					log.Printf("Warning: Failed to save login event: %v", err)
+				}
+			}()
 			
 			// Log full analytics every 5 logins
 			if totalLogins%5 == 0 {
@@ -2801,6 +2936,12 @@ func main() {
 	hub, err := NewPuzzleHub(provider)
 	if err != nil {
 		log.Fatalf("Failed to create puzzle hub: %v", err)
+	}
+
+	// Load analytics from DynamoDB
+	if err := loadAnalyticsFromDB(hub.DynamoDB); err != nil {
+		log.Printf("⚠️  Warning: Failed to load analytics from DynamoDB: %v", err)
+		log.Println("📊 Starting with fresh analytics counters")
 	}
 
 	r := setupRoutes(hub)
