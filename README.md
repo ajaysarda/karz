@@ -18,6 +18,20 @@ Features:
 
 **Location**: `puzzle-hub/` - **⭐ Recommended way to play!**
 
+### 📚 Story Starter Generator (NEW!)
+**An AI-powered creative writing assistant for 4th graders!**
+
+Features:
+- ✨ **Story Starters**: Generate exciting story openings with plot ideas
+- 👤 **Character Creator**: Build unique characters with personalities and backstories
+- 📖 **Plot Builder**: Create structured story outlines
+- 🌪️ **Plot Twist Generator**: Add surprising twists to stories
+- 🗺️ **Setting Designer**: Build vivid, immersive story worlds
+- ❤️ **Favorites**: Save and manage favorite ideas
+- 🎨 Kid-friendly, colorful interface
+
+**Location**: `story-starter/`
+
 ### 🐝 Spelling Bee (Standalone)
 An AI-powered spelling bee game with:
 - Age-appropriate word generation using Perplexity API
@@ -54,6 +68,11 @@ Then visit: **http://localhost:8995**
 Each game is also available as a standalone application:
 
 ```bash
+# For Story Starter Generator
+cd story-starter/
+./start.sh
+# Or manually: go run main.go
+
 # For Spelling Bee
 cd spelling-bee/
 go run .
@@ -80,6 +99,12 @@ karz/
 │   ├── static/          # Unified CSS/JS
 │   ├── templates/       # Beautiful game selection UI
 │   ├── cache/           # AI-generated content cache
+│   └── README.md
+├── story-starter/        # 📚 Story Starter Generator (NEW!)
+│   ├── main.go          # Creative writing assistant
+│   ├── start.sh         # Quick start script
+│   ├── static/          # CSS/JS for story generation
+│   ├── templates/       # Kid-friendly UI
 │   └── README.md
 ├── spelling-bee/         # 🐝 Standalone spelling bee game
 │   ├── main.go

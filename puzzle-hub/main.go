@@ -120,6 +120,24 @@ type NarrativeStructure struct {
 	Feedback        string `json:"feedback"`
 }
 
+// Story Starter Types
+type StoryRequest struct {
+	Genre       string   `json:"genre"`
+	Elements    []string `json:"elements"`
+	Tone        string   `json:"tone"`
+	Length      string   `json:"length"`
+	RequestType string   `json:"requestType"` // "prompt", "character", "plot", "twist", "setting"
+}
+
+type StoryResponse struct {
+	Title       string    `json:"title"`
+	Content     string    `json:"content"`
+	Ideas       []string  `json:"ideas,omitempty"`
+	Tips        []string  `json:"tips,omitempty"`
+	Questions   []string  `json:"questions,omitempty"`
+	GeneratedAt time.Time `json:"generated_at"`
+}
+
 // Yohaku Types
 type YohakuPuzzle struct {
 	ID         string      `json:"id"`
@@ -1413,6 +1431,191 @@ func (h *PuzzleHub) parseWritingAnalysisResponse(response string, request Writin
 
 // Fallback method removed - Writing analysis now requires AI API keys
 
+// Story Starter Generator
+func (h *PuzzleHub) GenerateStory(req StoryRequest) (*StoryResponse, error) {
+	prompt := h.buildStoryPrompt(req)
+
+	var content string
+
+	if h.Provider == "openai" && h.OpenAIClient != nil {
+		resp, err := h.OpenAIClient.CreateChatCompletion(
+			context.Background(),
+			openai.ChatCompletionRequest{
+				Model: openai.GPT4,
+				Messages: []openai.ChatCompletionMessage{
+					{
+						Role:    openai.ChatMessageRoleSystem,
+						Content: "You are a creative writing assistant for 4th grade students. Your job is to inspire young writers with fun, age-appropriate story ideas. Be enthusiastic, encouraging, and creative. Keep language simple but engaging.",
+					},
+					{
+						Role:    openai.ChatMessageRoleUser,
+						Content: prompt,
+					},
+				},
+			},
+		)
+
+		if err != nil {
+			return nil, fmt.Errorf("OpenAI API error: %w", err)
+		}
+
+		if len(resp.Choices) > 0 {
+			content = resp.Choices[0].Message.Content
+		}
+	} else if h.Provider == "perplexity" && h.PerplexityKey != "" {
+		// Use Perplexity API
+		perplexityReq := map[string]interface{}{
+			"model": "sonar",
+			"messages": []map[string]string{
+				{
+					"role":    "system",
+					"content": "You are a creative writing assistant for 4th grade students. Your job is to inspire young writers with fun, age-appropriate story ideas. Be enthusiastic, encouraging, and creative. Keep language simple but engaging.",
+				},
+				{
+					"role":    "user",
+					"content": prompt,
+				},
+			},
+		}
+
+		jsonData, err := json.Marshal(perplexityReq)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal request: %w", err)
+		}
+
+		httpReq, err := http.NewRequest("POST", "https://api.perplexity.ai/chat/completions", bytes.NewBuffer(jsonData))
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request: %w", err)
+		}
+
+		httpReq.Header.Set("Authorization", "Bearer "+h.PerplexityKey)
+		httpReq.Header.Set("Content-Type", "application/json")
+
+		client := &http.Client{Timeout: 30 * time.Second}
+		resp, err := client.Do(httpReq)
+		if err != nil {
+			return nil, fmt.Errorf("failed to call API: %w", err)
+		}
+		defer resp.Body.Close()
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read response: %w", err)
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(body))
+		}
+
+		var perplexityResp struct {
+			Choices []struct {
+				Message struct {
+					Content string `json:"content"`
+				} `json:"message"`
+			} `json:"choices"`
+		}
+
+		if err := json.Unmarshal(body, &perplexityResp); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+		}
+
+		if len(perplexityResp.Choices) == 0 {
+			return nil, fmt.Errorf("no response from API")
+		}
+
+		content = perplexityResp.Choices[0].Message.Content
+	} else {
+		return nil, fmt.Errorf("no AI provider configured")
+	}
+
+	storyResp := &StoryResponse{
+		Content:     content,
+		GeneratedAt: time.Now(),
+	}
+
+	return storyResp, nil
+}
+
+func (h *PuzzleHub) buildStoryPrompt(req StoryRequest) string {
+	elementsStr := ""
+	if len(req.Elements) > 0 {
+		elementsStr = fmt.Sprintf("Include these elements: %v. ", req.Elements)
+	}
+
+	genreStr := ""
+	if req.Genre != "" {
+		genreStr = fmt.Sprintf("Genre: %s. ", req.Genre)
+	}
+
+	toneStr := ""
+	if req.Tone != "" {
+		toneStr = fmt.Sprintf("Tone: %s. ", req.Tone)
+	}
+
+	switch req.RequestType {
+	case "prompt":
+		return fmt.Sprintf(`Generate a creative and exciting story starter for a 4th grader. %s%s%s
+
+Format your response as:
+TITLE: [Catchy story title]
+OPENING: [2-3 sentence story beginning that hooks the reader]
+IDEAS: [3 bullet points with "what happens next" ideas]
+TIPS: [2 writing tips specific to this story]
+
+Make it fun, imaginative, and age-appropriate!`, genreStr, toneStr, elementsStr)
+
+	case "character":
+		return fmt.Sprintf(`Create an interesting character for a 4th grader's story. %s%s%s
+
+Format your response as:
+NAME: [Character name]
+DESCRIPTION: [Physical description and personality - 2-3 sentences]
+BACKGROUND: [Brief backstory - 2 sentences]
+SPECIAL TRAIT: [Something unique or interesting about them]
+QUESTIONS: [3 questions to help develop the character further]
+
+Make the character relatable and fun for a 10-year-old!`, genreStr, toneStr, elementsStr)
+
+	case "plot":
+		return fmt.Sprintf(`Create an exciting plot outline for a short story. %s%s%s
+
+Format your response as:
+BEGINNING: [How the story starts]
+PROBLEM: [The main challenge or conflict]
+MIDDLE: [3 key events that happen]
+CLIMAX: [The most exciting part]
+ENDING IDEAS: [2 different ways the story could end]
+
+Make it engaging and appropriate for 4th grade reading level!`, genreStr, toneStr, elementsStr)
+
+	case "twist":
+		return fmt.Sprintf(`Generate a surprising plot twist for a story. %s%s%s
+
+Format your response as:
+TWIST: [The surprising turn of events - 2-3 sentences]
+WHY IT WORKS: [Why this twist is interesting]
+HOW TO BUILD UP: [2-3 tips for setting up this twist earlier in the story]
+ALTERNATIVE TWISTS: [2 other possible twists]
+
+Make it creative and fun, but not too scary for a 4th grader!`, genreStr, toneStr, elementsStr)
+
+	case "setting":
+		return fmt.Sprintf(`Create a vivid and interesting setting for a story. %s%s%s
+
+Format your response as:
+LOCATION: [Where the story takes place]
+TIME: [When it takes place]
+DESCRIPTION: [Vivid description using the 5 senses - 3-4 sentences]
+MOOD: [The feeling this setting creates]
+STORY POSSIBILITIES: [3 things that could happen in this setting]
+
+Make it descriptive and imaginative for a 4th grader!`, genreStr, toneStr, elementsStr)
+
+	default:
+		return fmt.Sprintf(`Generate a creative story idea for a 4th grader. %s%s%s Make it exciting and fun!`, genreStr, toneStr, elementsStr)
+	}
+}
+
 // Web server setup
 // Analytics tracking types
 type AnalyticsEvent struct {
@@ -1851,6 +2054,24 @@ func setupRoutes(hub *PuzzleHub) *gin.Engine {
 				"analysis": analysis,
 				"message":  "Writing analysis completed successfully!",
 			})
+		})
+
+		// Story Starter endpoints
+		api.POST("/story/generate", func(c *gin.Context) {
+			var request StoryRequest
+			if err := c.ShouldBindJSON(&request); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+
+			story, err := hub.GenerateStory(request)
+			if err != nil {
+				log.Printf("Error generating story: %v", err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate story"})
+				return
+			}
+
+			c.JSON(http.StatusOK, story)
 		})
 
 		// Custom Logging System endpoints

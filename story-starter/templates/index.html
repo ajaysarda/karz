@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.title}}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="/static/style.css" rel="stylesheet">
+</head>
+<body>
+    <!-- Hero Section -->
+    <div class="hero-section">
+        <div class="container">
+            <div class="row">
+                <div class="col-lg-10 mx-auto text-center">
+                    <h1 class="display-3 mb-4">
+                        <i class="fas fa-magic"></i> Story Starter Generator
+                    </h1>
+                    <p class="lead">Create amazing stories with AI-powered inspiration!</p>
+                    <div class="mt-4">
+                        <span class="badge bg-light text-dark me-2"><i class="fas fa-book"></i> Story Prompts</span>
+                        <span class="badge bg-light text-dark me-2"><i class="fas fa-user-ninja"></i> Characters</span>
+                        <span class="badge bg-light text-dark me-2"><i class="fas fa-route"></i> Plot Ideas</span>
+                        <span class="badge bg-light text-dark me-2"><i class="fas fa-surprise"></i> Plot Twists</span>
+                        <span class="badge bg-light text-dark"><i class="fas fa-map-marked-alt"></i> Settings</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container my-5">
+        <!-- Generation Type Tabs -->
+        <ul class="nav nav-pills mb-4 justify-content-center" id="typeTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="prompt-tab" data-bs-toggle="pill" data-bs-target="#prompt" type="button" role="tab">
+                    <i class="fas fa-lightbulb"></i> Story Starter
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="character-tab" data-bs-toggle="pill" data-bs-target="#character" type="button" role="tab">
+                    <i class="fas fa-user-ninja"></i> Character
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="plot-tab" data-bs-toggle="pill" data-bs-target="#plot" type="button" role="tab">
+                    <i class="fas fa-route"></i> Plot
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="twist-tab" data-bs-toggle="pill" data-bs-target="#twist" type="button" role="tab">
+                    <i class="fas fa-surprise"></i> Twist
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="setting-tab" data-bs-toggle="pill" data-bs-target="#setting" type="button" role="tab">
+                    <i class="fas fa-map-marked-alt"></i> Setting
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="favorites-tab" data-bs-toggle="pill" data-bs-target="#favorites" type="button" role="tab">
+                    <i class="fas fa-heart"></i> Favorites
+                </button>
+            </li>
+        </ul>
+
+        <!-- Tab Content -->
+        <div class="tab-content" id="typeTabsContent">
+            <!-- Story Starter Tab -->
+            <div class="tab-pane fade show active" id="prompt" role="tabpanel">
+                <div class="row">
+                    <div class="col-lg-10 mx-auto">
+                        <div class="card shadow-lg generator-card">
+                            <div class="card-header bg-gradient-primary">
+                                <h3 class="mb-0"><i class="fas fa-lightbulb"></i> Generate Story Starter</h3>
+                            </div>
+                            <div class="card-body">
+                                <form id="promptForm" class="generator-form">
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label"><i class="fas fa-palette"></i> Genre</label>
+                                            <select class="form-select" name="genre" required>
+                                                <option value="">Any Genre</option>
+                                                <option value="adventure">Adventure</option>
+                                                <option value="fantasy">Fantasy</option>
+                                                <option value="mystery">Mystery</option>
+                                                <option value="sci-fi">Science Fiction</option>
+                                                <option value="friendship">Friendship</option>
+                                                <option value="animal">Animal Stories</option>
+                                                <option value="comedy">Comedy</option>
+                                                <option value="superhero">Superhero</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label"><i class="fas fa-smile"></i> Tone</label>
+                                            <select class="form-select" name="tone">
+                                                <option value="">Any Tone</option>
+                                                <option value="funny">Funny</option>
+                                                <option value="exciting">Exciting</option>
+                                                <option value="mysterious">Mysterious</option>
+                                                <option value="heartwarming">Heartwarming</option>
+                                                <option value="spooky">Spooky (but not scary!)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label"><i class="fas fa-puzzle-piece"></i> Story Elements (Optional)</label>
+                                        <div class="element-chips">
+                                            <button type="button" class="chip" data-element="dragon">🐉 Dragon</button>
+                                            <button type="button" class="chip" data-element="robot">🤖 Robot</button>
+                                            <button type="button" class="chip" data-element="magic">✨ Magic</button>
+                                            <button type="button" class="chip" data-element="treasure">💎 Treasure</button>
+                                            <button type="button" class="chip" data-element="time travel">⏰ Time Travel</button>
+                                            <button type="button" class="chip" data-element="talking animals">🦊 Talking Animals</button>
+                                            <button type="button" class="chip" data-element="secret door">🚪 Secret Door</button>
+                                            <button type="button" class="chip" data-element="friendship">👫 Friendship</button>
+                                        </div>
+                                        <input type="text" class="form-control mt-2" name="customElement" placeholder="Or type your own element...">
+                                    </div>
+                                    <div class="text-center">
+                                        <button type="submit" class="btn btn-lg btn-generate">
+                                            <i class="fas fa-magic"></i> Generate Story Starter!
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+
+                        <!-- Result Display -->
+                        <div id="promptResult" class="result-card mt-4" style="display: none;">
+                            <div class="result-content"></div>
+                            <div class="result-actions">
+                                <button class="btn btn-primary" onclick="saveToFavorites('prompt')">
+                                    <i class="fas fa-heart"></i> Save to Favorites
+                                </button>
+                                <button class="btn btn-secondary" onclick="copyToClipboard('promptResult')">
+                                    <i class="fas fa-copy"></i> Copy
+                                </button>
+                                <button class="btn btn-info" onclick="generateNew('prompt')">
+                                    <i class="fas fa-sync"></i> Generate Another
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Character Tab -->
+            <div class="tab-pane fade" id="character" role="tabpanel">
+                <div class="row">
+                    <div class="col-lg-10 mx-auto">
+                        <div class="card shadow-lg generator-card">
+                            <div class="card-header bg-gradient-success">
+                                <h3 class="mb-0"><i class="fas fa-user-ninja"></i> Generate Character</h3>
+                            </div>
+                            <div class="card-body">
+                                <form id="characterForm" class="generator-form">
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label"><i class="fas fa-users"></i> Character Type</label>
+                                            <select class="form-select" name="genre">
+                                                <option value="">Any Type</option>
+                                                <option value="hero">Hero</option>
+                                                <option value="sidekick">Sidekick</option>
+                                                <option value="villain">Villain</option>
+                                                <option value="magical creature">Magical Creature</option>
+                                                <option value="animal">Animal</option>
+                                                <option value="robot">Robot</option>
+                                                <option value="alien">Alien</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label"><i class="fas fa-star"></i> Personality</label>
+                                            <select class="form-select" name="tone">
+                                                <option value="">Any Personality</option>
+                                                <option value="brave">Brave</option>
+                                                <option value="funny">Funny</option>
+                                                <option value="smart">Smart</option>
+                                                <option value="shy">Shy but Strong</option>
+                                                <option value="mischievous">Mischievous</option>
+                                                <option value="kind">Kind</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="text-center">
+                                        <button type="submit" class="btn btn-lg btn-generate">
+                                            <i class="fas fa-magic"></i> Create Character!
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+
+                        <div id="characterResult" class="result-card mt-4" style="display: none;">
+                            <div class="result-content"></div>
+                            <div class="result-actions">
+                                <button class="btn btn-primary" onclick="saveToFavorites('character')">
+                                    <i class="fas fa-heart"></i> Save to Favorites
+                                </button>
+                                <button class="btn btn-secondary" onclick="copyToClipboard('characterResult')">
+                                    <i class="fas fa-copy"></i> Copy
+                                </button>
+                                <button class="btn btn-info" onclick="generateNew('character')">
+                                    <i class="fas fa-sync"></i> Generate Another
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Plot Tab -->
+            <div class="tab-pane fade" id="plot" role="tabpanel">
+                <div class="row">
+                    <div class="col-lg-10 mx-auto">
+                        <div class="card shadow-lg generator-card">
+                            <div class="card-header bg-gradient-warning">
+                                <h3 class="mb-0"><i class="fas fa-route"></i> Generate Plot</h3>
+                            </div>
+                            <div class="card-body">
+                                <form id="plotForm" class="generator-form">
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label"><i class="fas fa-palette"></i> Genre</label>
+                                            <select class="form-select" name="genre">
+                                                <option value="">Any Genre</option>
+                                                <option value="adventure">Adventure</option>
+                                                <option value="fantasy">Fantasy</option>
+                                                <option value="mystery">Mystery</option>
+                                                <option value="sci-fi">Science Fiction</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label"><i class="fas fa-ruler"></i> Story Length</label>
+                                            <select class="form-select" name="length">
+                                                <option value="short">Short Story</option>
+                                                <option value="medium" selected>Medium Story</option>
+                                                <option value="long">Chapter Book</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="text-center">
+                                        <button type="submit" class="btn btn-lg btn-generate">
+                                            <i class="fas fa-magic"></i> Create Plot!
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+
+                        <div id="plotResult" class="result-card mt-4" style="display: none;">
+                            <div class="result-content"></div>
+                            <div class="result-actions">
+                                <button class="btn btn-primary" onclick="saveToFavorites('plot')">
+                                    <i class="fas fa-heart"></i> Save to Favorites
+                                </button>
+                                <button class="btn btn-secondary" onclick="copyToClipboard('plotResult')">
+                                    <i class="fas fa-copy"></i> Copy
+                                </button>
+                                <button class="btn btn-info" onclick="generateNew('plot')">
+                                    <i class="fas fa-sync"></i> Generate Another
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Twist Tab -->
+            <div class="tab-pane fade" id="twist" role="tabpanel">
+                <div class="row">
+                    <div class="col-lg-10 mx-auto">
+                        <div class="card shadow-lg generator-card">
+                            <div class="card-header bg-gradient-danger">
+                                <h3 class="mb-0"><i class="fas fa-surprise"></i> Generate Plot Twist</h3>
+                            </div>
+                            <div class="card-body">
+                                <form id="twistForm" class="generator-form">
+                                    <div class="row">
+                                        <div class="col-md-12 mb-3">
+                                            <label class="form-label"><i class="fas fa-palette"></i> Genre</label>
+                                            <select class="form-select" name="genre">
+                                                <option value="">Any Genre</option>
+                                                <option value="mystery">Mystery</option>
+                                                <option value="adventure">Adventure</option>
+                                                <option value="fantasy">Fantasy</option>
+                                                <option value="sci-fi">Science Fiction</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="text-center">
+                                        <button type="submit" class="btn btn-lg btn-generate">
+                                            <i class="fas fa-magic"></i> Surprise Me!
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+
+                        <div id="twistResult" class="result-card mt-4" style="display: none;">
+                            <div class="result-content"></div>
+                            <div class="result-actions">
+                                <button class="btn btn-primary" onclick="saveToFavorites('twist')">
+                                    <i class="fas fa-heart"></i> Save to Favorites
+                                </button>
+                                <button class="btn btn-secondary" onclick="copyToClipboard('twistResult')">
+                                    <i class="fas fa-copy"></i> Copy
+                                </button>
+                                <button class="btn btn-info" onclick="generateNew('twist')">
+                                    <i class="fas fa-sync"></i> Generate Another
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Setting Tab -->
+            <div class="tab-pane fade" id="setting" role="tabpanel">
+                <div class="row">
+                    <div class="col-lg-10 mx-auto">
+                        <div class="card shadow-lg generator-card">
+                            <div class="card-header bg-gradient-info">
+                                <h3 class="mb-0"><i class="fas fa-map-marked-alt"></i> Generate Setting</h3>
+                            </div>
+                            <div class="card-body">
+                                <form id="settingForm" class="generator-form">
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label"><i class="fas fa-globe"></i> Setting Type</label>
+                                            <select class="form-select" name="genre">
+                                                <option value="">Any Setting</option>
+                                                <option value="magical forest">Magical Forest</option>
+                                                <option value="space station">Space Station</option>
+                                                <option value="underwater city">Underwater City</option>
+                                                <option value="fantasy castle">Fantasy Castle</option>
+                                                <option value="future city">Future City</option>
+                                                <option value="mysterious island">Mysterious Island</option>
+                                                <option value="hidden village">Hidden Village</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label"><i class="fas fa-cloud-sun"></i> Atmosphere</label>
+                                            <select class="form-select" name="tone">
+                                                <option value="">Any Atmosphere</option>
+                                                <option value="peaceful">Peaceful</option>
+                                                <option value="mysterious">Mysterious</option>
+                                                <option value="dangerous">Dangerous</option>
+                                                <option value="magical">Magical</option>
+                                                <option value="exciting">Exciting</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="text-center">
+                                        <button type="submit" class="btn btn-lg btn-generate">
+                                            <i class="fas fa-magic"></i> Create Setting!
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+
+                        <div id="settingResult" class="result-card mt-4" style="display: none;">
+                            <div class="result-content"></div>
+                            <div class="result-actions">
+                                <button class="btn btn-primary" onclick="saveToFavorites('setting')">
+                                    <i class="fas fa-heart"></i> Save to Favorites
+                                </button>
+                                <button class="btn btn-secondary" onclick="copyToClipboard('settingResult')">
+                                    <i class="fas fa-copy"></i> Copy
+                                </button>
+                                <button class="btn btn-info" onclick="generateNew('setting')">
+                                    <i class="fas fa-sync"></i> Generate Another
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Favorites Tab -->
+            <div class="tab-pane fade" id="favorites" role="tabpanel">
+                <div class="row">
+                    <div class="col-lg-10 mx-auto">
+                        <div class="card shadow-lg">
+                            <div class="card-header bg-gradient-pink">
+                                <h3 class="mb-0"><i class="fas fa-heart"></i> My Favorites</h3>
+                            </div>
+                            <div class="card-body">
+                                <div id="favoritesList">
+                                    <p class="text-center text-muted">No favorites yet! Generate some awesome stories and save your favorites.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading Indicator -->
+        <div class="loading-overlay" id="loadingOverlay" style="display: none;">
+            <div class="loading-spinner">
+                <i class="fas fa-magic fa-spin fa-3x"></i>
+                <p class="mt-3">Creating something amazing...</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/app.js"></script>
+</body>
+</html>
+

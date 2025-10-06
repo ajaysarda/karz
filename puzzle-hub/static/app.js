@@ -128,6 +128,9 @@ function selectPuzzle(puzzleType) {
                 console.log('Writing form handler attached on tab activation');
             }
         }, 100);
+    } else if (puzzleType === 'story') {
+        const storyTab = new bootstrap.Tab(document.getElementById('story-tab'));
+        storyTab.show();
     }
 }
 
@@ -3944,4 +3947,62 @@ async function deleteLogEntry(entryId) {
         console.error('Error deleting entry:', error);
         showFeedback(error.message, 'error');
     }
+}
+
+// ================================
+// Story Starter Functions
+// ================================
+
+async function generateStory() {
+    const requestType = document.getElementById('storyRequestType').value;
+    const genre = document.getElementById('storyGenre').value;
+    const tone = document.getElementById('storyTone').value;
+
+    // Show loading
+    document.getElementById('storyLoading').style.display = 'block';
+    document.getElementById('storyResult').style.display = 'none';
+
+    try {
+        const response = await fetch('/api/story/generate', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`
+            },
+            body: JSON.stringify({
+                requestType: requestType,
+                genre: genre,
+                tone: tone,
+                elements: [],
+                length: 'medium'
+            })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to generate story');
+        }
+
+        const data = await response.json();
+        
+        // Display result
+        document.getElementById('storyContent').textContent = data.content;
+        document.getElementById('storyResult').style.display = 'block';
+        
+    } catch (error) {
+        console.error('Error generating story:', error);
+        showFeedback('Failed to generate story. Please try again.', 'error');
+    } finally {
+        document.getElementById('storyLoading').style.display = 'none';
+    }
+}
+
+function copyStoryToClipboard() {
+    const content = document.getElementById('storyContent').textContent;
+    navigator.clipboard.writeText(content).then(() => {
+        showFeedback('Copied to clipboard!', 'success');
+    }).catch(err => {
+        console.error('Failed to copy:', err);
+        showFeedback('Failed to copy to clipboard', 'error');
+    });
 }
