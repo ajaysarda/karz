@@ -1462,7 +1462,7 @@ func saveAnalyticsEvent(eventType, ip, userID string, isNew bool) error {
 
 func loadAnalyticsFromDB(db *dynamodb.DynamoDB) error {
 	analyticsDB = db
-	
+
 	// Scan analytics table to rebuild in-memory cache
 	result, err := db.Scan(&dynamodb.ScanInput{
 		TableName: aws.String("puzzle-hub-analytics"),
@@ -1473,7 +1473,7 @@ func loadAnalyticsFromDB(db *dynamodb.DynamoDB) error {
 
 	visitorIPs := make(map[string]bool)
 	userIDs := make(map[string]bool)
-	
+
 	for _, item := range result.Items {
 		var event AnalyticsEvent
 		if err := dynamodbattribute.UnmarshalMap(item, &event); err != nil {
@@ -1498,7 +1498,7 @@ func loadAnalyticsFromDB(db *dynamodb.DynamoDB) error {
 
 	log.Printf("📊 Loaded analytics from DynamoDB: %d visits, %d unique visitors, %d logins, %d unique users",
 		totalVisits, len(uniqueVisitors), totalLogins, len(uniqueUsers))
-	
+
 	return nil
 }
 
@@ -1511,24 +1511,24 @@ func setupRoutes(hub *PuzzleHub) *gin.Engine {
 		if !strings.HasPrefix(c.Request.URL.Path, "/api/") &&
 			!strings.HasPrefix(c.Request.URL.Path, "/static/") &&
 			c.Request.URL.Path != "/favicon.ico" {
-			
+
 			totalVisits++
 			clientIP := c.ClientIP()
 			isNewVisitor := !uniqueVisitors[clientIP]
-			
+
 			if isNewVisitor {
 				uniqueVisitors[clientIP] = true
 				log.Printf("🆕 New visitor from IP: %s | Total visits: %d | Unique visitors: %d",
 					clientIP, totalVisits, len(uniqueVisitors))
 			}
-			
+
 			// Save to DynamoDB (async to not slow down requests)
 			go func() {
 				if err := saveAnalyticsEvent("visit", clientIP, "", isNewVisitor); err != nil {
 					log.Printf("Warning: Failed to save visit event: %v", err)
 				}
 			}()
-			
+
 			// Log analytics every 10 visits
 			if totalVisits%10 == 0 {
 				logAnalytics()
@@ -1587,27 +1587,27 @@ func setupRoutes(hub *PuzzleHub) *gin.Engine {
 
 			// Create or update user
 			user := hub.createOrUpdateUser(googleUser)
-			
+
 			// Track login analytics
 			totalLogins++
 			isNewUser := !uniqueUsers[user.ID]
 			if isNewUser {
 				uniqueUsers[user.ID] = true
 			}
-			
+
 			if isNewUser {
 				log.Printf("🎉 New user login | Total logins: %d | Unique users: %d", totalLogins, len(uniqueUsers))
 			} else {
 				log.Printf("🔄 Returning user login | Total logins: %d | Unique users: %d", totalLogins, len(uniqueUsers))
 			}
-			
+
 			// Save to DynamoDB (async)
 			go func() {
 				if err := saveAnalyticsEvent("login", "", user.ID, isNewUser); err != nil {
 					log.Printf("Warning: Failed to save login event: %v", err)
 				}
 			}()
-			
+
 			// Log full analytics every 5 logins
 			if totalLogins%5 == 0 {
 				logAnalytics()
@@ -2916,7 +2916,7 @@ func main() {
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file found, using system environment variables")
 	}
-	
+
 	// Start periodic analytics reporting (every hour)
 	go func() {
 		ticker := time.NewTicker(1 * time.Hour)
