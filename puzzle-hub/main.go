@@ -1370,8 +1370,44 @@ func (h *PuzzleHub) parseWritingAnalysisResponse(response string, request Writin
 // Fallback method removed - Writing analysis now requires AI API keys
 
 // Web server setup
+// Analytics tracking
+var (
+	totalVisits   int64
+	totalLogins   int64
+	uniqueVisitors = make(map[string]bool) // Track by IP
+	uniqueUsers    = make(map[string]bool) // Track by User ID
+)
+
+func logAnalytics() {
+	log.Printf("📊 ANALYTICS - Total Visits: %d | Unique Visitors: %d | Total Logins: %d | Unique Users: %d",
+		totalVisits, len(uniqueVisitors), totalLogins, len(uniqueUsers))
+}
+
 func setupRoutes(hub *PuzzleHub) *gin.Engine {
 	r := gin.Default()
+
+	// Analytics middleware - track every request
+	r.Use(func(c *gin.Context) {
+		// Only count page visits, not API calls or static files
+		if !strings.HasPrefix(c.Request.URL.Path, "/api/") &&
+			!strings.HasPrefix(c.Request.URL.Path, "/static/") &&
+			c.Request.URL.Path != "/favicon.ico" {
+			
+			totalVisits++
+			clientIP := c.ClientIP()
+			if !uniqueVisitors[clientIP] {
+				uniqueVisitors[clientIP] = true
+				log.Printf("🆕 New visitor from IP: %s | Total visits: %d | Unique visitors: %d",
+					clientIP, totalVisits, len(uniqueVisitors))
+			}
+			
+			// Log analytics every 10 visits
+			if totalVisits%10 == 0 {
+				logAnalytics()
+			}
+		}
+		c.Next()
+	})
 
 	r.Static("/static", "./static")
 	r.LoadHTMLGlob("templates/*")
@@ -1423,6 +1459,24 @@ func setupRoutes(hub *PuzzleHub) *gin.Engine {
 
 			// Create or update user
 			user := hub.createOrUpdateUser(googleUser)
+			
+			// Track login analytics
+			totalLogins++
+			isNewUser := !uniqueUsers[user.ID]
+			if isNewUser {
+				uniqueUsers[user.ID] = true
+			}
+			
+			if isNewUser {
+				log.Printf("🎉 New user login | Total logins: %d | Unique users: %d", totalLogins, len(uniqueUsers))
+			} else {
+				log.Printf("🔄 Returning user login | Total logins: %d | Unique users: %d", totalLogins, len(uniqueUsers))
+			}
+			
+			// Log full analytics every 5 logins
+			if totalLogins%5 == 0 {
+				logAnalytics()
+			}
 
 			// Generate JWT token
 			jwtToken, err := hub.generateJWT(user)
@@ -2727,6 +2781,16 @@ func main() {
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file found, using system environment variables")
 	}
+	
+	// Start periodic analytics reporting (every hour)
+	go func() {
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
+			log.Println("⏰ HOURLY ANALYTICS REPORT:")
+			logAnalytics()
+		}
+	}()
 
 	provider := os.Getenv("AI_PROVIDER")
 	if provider == "" {

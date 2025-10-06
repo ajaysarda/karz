@@ -1207,19 +1207,18 @@ body {
 }
 
 .mini-calendar .calendar-day {
-    min-height: 80px;
-    padding: 15px 5px 5px 5px;
+    min-height: 90px;
+    padding: 25px 8px 8px 8px;
     border-right: 1px solid #e9ecef;
     border-bottom: 1px solid #e9ecef;
     position: relative;
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
+    justify-content: flex-end;
     align-items: flex-end;
     background: white;
     transition: all 0.3s ease;
     cursor: pointer;
-    text-align: right;
 }
 
 .mini-calendar .calendar-day:last-child {
@@ -1256,13 +1255,14 @@ body {
 }
 
 .day-number {
-    font-size: 0.9em;
+    font-size: 0.95em;
     font-weight: 600;
     color: #444;
     position: absolute;
-    top: 5px;
-    right: 5px;
+    top: 6px;
+    right: 8px;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    z-index: 1;
 }
 
 .day-metric {
@@ -1282,19 +1282,19 @@ body {
 
 /* New trading calendar specific styles - Enhanced typography */
 .day-pl {
-    font-size: 1.1em;
+    font-size: 1.05em;
     font-weight: 700;
     text-align: right;
-    padding: 5px 0;
-    margin-top: 20px;
+    line-height: 1.2;
     color: inherit;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
 .day-trades {
-    font-size: 0.75em;
+    font-size: 0.7em;
     text-align: right;
-    margin-top: 2px;
+    margin-top: 3px;
+    line-height: 1.1;
     color: rgba(0, 0, 0, 0.6);
     font-weight: 500;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
